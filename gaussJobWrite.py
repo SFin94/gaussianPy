@@ -23,6 +23,9 @@ parser.add_argument("-p", dest="preset", nargs=1, type=int,
 
 args = parser.parse_args()
 
+# Initially set skipConnectivity flag to false
+skipConnectivity = False
+
 # Sets filename and removes '.com' if present at the end of the name
 fileName = args.fileName[0]
 if fileName[-4:] == '.com':
@@ -30,20 +33,22 @@ if fileName[-4:] == '.com':
 
 # Set the job method and type keywords for the new input file
 jobMethod = args.method[0]+'/'+args.basisSet[0]
-
+print(args.modRed)
 # Set the job type and
 jobType = ''
 jobTitle = fileName
 for jT in args.jobType:
     if jT == 'Opt':
-        jobType += 'Opt '
+        if args.modRed == True:
+            jobType += 'Opt(ModRedundant) '
+        else: jobType += 'Opt '
     if jT == 'Freq':
         jobType += 'Freq '
     if jT == 'TS':
         jobType += 'Opt(TS,NoEigen,RCFC) Freq '
     if jT == 'scan':
         jobType += 'Opt(ModRedundant,MaxCycles=100) '
-        args.modRed[0] = True
+        args.modRed = True
     jobTitle = jobTitle + ' ' + jT
 
 # Assume file structure as
@@ -60,36 +65,38 @@ for index, el in enumerate(inputRaw):
         section.append(index)
     if 'connectivity' in el:
         skipConnectivity = True
-    else: skipConnectivity = False
 ind = 1
-
-print(args.geom)
+print(skipConnectivity)
 
 # Set the job Spec
 jobSpec = '#P ' + jobMethod + ' ' + jobType + ' SCF(Conver=9) Int(Grid=UltraFine)'
+
+# Sets charges + multiplicity and/or molecular geometry from original file
 if args.geom == 'chk':
     jobSpec += ' Geom(Check) Guess(Read)'
     moleculeGeom = [inputRaw[section[ind]+1]]
     ind += 1
-
-# Sets charges + multiplicity and/or molecular geometry from original file
 if args.geom == 'file':
     moleculeGeom = inputRaw[section[ind]+1:section[ind+1]]
     ind += 1
-print(moleculeGeom)
-
 if args.geom == 'allchk':
     jobSpec += ' Geom(AllCheck) Guess(Read)'
 
+# Omits connectivty block if present
 if skipConnectivity == True:
     ind += 1
 
+# Sets modredundant input from next section or user input
 if args.modRed == True:
-    modRedundant = inputRaw[section[ind]+1:section[ind+1]]
+    if ind == (len(section)-1):
+        modRedundant = input("Enter modRedunant input (csv for multiple lines):").split(',')
+    else:
+        modRedundant = inputRaw[section[ind]+1:section[ind+1]]
 
 # Parses in presets and sets variables from that?
 
-with open(fileName+'new.com', 'w+') as output:
+# Writes new .com file
+with open(fileName+'.com', 'w+') as output:
     print('%Chk=' + fileName, file=output)
     print('%NProcShared=12', file=output)
     print('%Mem=36000MB', file=output)
@@ -99,7 +106,7 @@ with open(fileName+'new.com', 'w+') as output:
         for el in moleculeGeom:
             print(el, file=output)
     if args.modRed == True:
-        print('\n')
+        print('', file=output)
         for el in modRedundant:
             print(el, file=output)
     print('\n\n', file=output)
