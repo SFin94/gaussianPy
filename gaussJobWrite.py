@@ -63,15 +63,23 @@ for index, el in enumerate(inputRaw):
     else: skipConnectivity = False
 ind = 1
 
+print(args.geom)
+
 # Set the job Spec
 jobSpec = '#P ' + jobMethod + ' ' + jobType + ' SCF(Conver=9) Int(Grid=UltraFine)'
 if args.geom == 'chk':
     jobSpec += ' Geom(Check) Guess(Read)'
+    moleculeGeom = [inputRaw[section[ind]+1]]
+    ind += 1
 
 # Sets charges + multiplicity and/or molecular geometry from original file
-if args.geom in ['file','chk']:
+if args.geom == 'file':
     moleculeGeom = inputRaw[section[ind]+1:section[ind+1]]
     ind += 1
+print(moleculeGeom)
+
+if args.geom == 'allchk':
+    jobSpec += ' Geom(AllCheck) Guess(Read)'
 
 if skipConnectivity == True:
     ind += 1
@@ -79,13 +87,9 @@ if skipConnectivity == True:
 if args.modRed == True:
     modRedundant = inputRaw[section[ind]+1:section[ind+1]]
 
-# Add possibility of using allcheck? Uses the same job title and multiplicity
-#elif args.geom[0] == 'allchk':
-#    jobSpec += 'Geom(AllCheck)
-
 # Parses in presets and sets variables from that?
 
-with open(fileName+'New.com', 'w+') as output:
+with open(fileName+'new.com', 'w+') as output:
     print('%Chk=' + fileName, file=output)
     print('%NProcShared=12', file=output)
     print('%Mem=36000MB', file=output)
