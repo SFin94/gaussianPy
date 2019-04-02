@@ -43,23 +43,37 @@ def geomPull(inputFile, numAtoms, optStep=1):
             if 'Optimized Parameters' in el:
                 optCount += 1
             if (optCount == optStep):
-                break
+                return(molCoords)
     return(molCoords)
 
 
 def atomIdentify(inputFile, numAtoms):
 
+    atomIDs = []
     with open(inputFile, 'r') as logFile:
         for el in logFile:
+            if 'Charge = ' in el:
+                el = logFile.__next__()
+                if ('No Z-Matrix' in el) or ('Redundant internal coordinates' in el):
+                    el = logFile.__next__()
+                for atom in range(numAtoms):
+                    atomIDs.append(el.split()[0][0])
+                    el = logFile.__next__()
+                break
+    return(atomIDs)
 
-            if ' Charge = ' in el:
-                logFile.__next__()
-                if 'No Z-Matrix' in el:
-                    logFile.__next__()
-                    j = 2
-                else: j = 1
-                print(el)
 
+def paramGeom(paramInd, geometry):
+
+    paramVal = []
+    for pI in paramInd:
+        if len(pI) == 2:
+            paramVal.append(atomDist(geometry[pI[0]], geometry[pI[1]]))
+        elif len(pI) == 3:
+            paramVal.append(atomAngle(geometry[pI[0]], geometry[pI[1]], geometry[pI[2]]))
+        else:
+            paramVal.append(atomDihedral(geometry[pI[0]], geometry[pI[1]], geometry[pI[2]], geometry[pI[3]]))
+    return(paramVal)
 
 
 def atomDist(atomOne, atomTwo):
@@ -142,5 +156,5 @@ def atomDihedral(atomOne, atomTwo, atomThree, atomFour):
 #if __name__ == '__main__':
 
 #    input = (str(sys.argv[1]))
-#    molecule = geomPull(input, 42)
+#    molecule = geomPull(input, 27)
 #    print(molecule)
