@@ -88,7 +88,7 @@ class waterPosition:
         # Calculate vector b1 using the donor and H positions, use to calculate O position
         b1 = self.targMol - self.neighbours[0]
         b1 /= np.linalg.norm(b1)
-        self.OW = donMol + b1*2
+        self.OW = self.targMol + b1*2
 
         # Find orthonormal basis with b1 using cross products (GS process alterantive works but was unnecessary as orthogonal basis already created)
         b2 = np.cross(self.targMol, self.neighbours[0])
@@ -143,7 +143,7 @@ class waterPosition:
 #        self.HWTwo = np.matmul(bPx, rot)*self.bondOH + self.OW
 
 
-    def acceptorSetUp(self):
+    def waterSetUp(self, target):
 
         '''Function to set up water molecule with acceptor interaction - calculates the b1 vector dependant on the number of covalently bonded neighbours and updates the water and dummy atom positons for the object through the acceptorCalc function
 
@@ -156,7 +156,6 @@ class waterPosition:
         cBonds = []
         for nB in self.neighbours:
             cInitial = nB - self.targMol
-#            cInitial /= np.linalg.norm(cInitial)
             cBonds.append(cInitial)
 
         # Find centroid of the bonds - centre of mass?- could be same as case for 2?
@@ -165,10 +164,6 @@ class waterPosition:
             b1 += cB
         b1 /= len(cBonds)
         b1 /= np.linalg.norm(b1)
-
-        self.HWOne = self.targMol - b1*2
-        # Position O bond distance away from the H
-        self.OW = self.HWOne - b1*self.bondOH
 
         # Position the two dummy atoms
         # Find orthonormal basis with b1 using cross products (GS process alternative works but was unnecessary as orthogonal basis already created)
@@ -181,32 +176,49 @@ class waterPosition:
         self.dOne = self.targMol + b2
         self.dTwo = self.targMol + b3
 
-        # For second OH bond the angle will be angleHOH - 90
-        rot = self.rotationY(-(self.angleHOH - 0.5*np.pi), np.array([1., 0., 0.]))
-        # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
-        bPx = np.array([b2, b3, b1]).transpose()
-        # Transform the rotation vectors for the second water H to the donor basis, scale, and add to the water O
-        self.HWTwo = self.OW - np.matmul(bPx, rot)*self.bondOH
+        if target == 'don':
+
+            self.OW = self.targMol + b1*2
+
+            # Rotate standard basis by desired angles around the y axis
+            rotOne = self.rotationY(self.angles[0], np.array([1., 0., 0.]))
+            rotTwo = self.rotationY(self.angles[1], np.array([1., 0., 0.]))
+
+            # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
+            bPx = np.array([b2, b3, b1]).transpose()
+            # Transform the rotation vectors for the water H's to the donor basis, scale, and add to the water O
+            self.HWOne = np.matmul(bPx, rotOne)*self.bondOH + self.OW
+            self.HWTwo = np.matmul(bPx, rotTwo)*self.bondOH + self.OW
+
+        elif target == 'acc':
+
+            self.HWOne = self.targMol - b1*2
+            # Position O bond distance away from the H
+            self.OW = self.HWOne - b1*self.bondOH
+
+            # For second OH bond the angle will be angleHOH - 90
+            rot = self.rotationY(-(self.angleHOH - 0.5*np.pi), np.array([1., 0., 0.]))
+            # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
+            bPx = np.array([b2, b3, b1]).transpose()
+            # Transform the rotation vectors for the second water H to the donor basis, scale, and add to the water O
+            self.HWTwo = self.OW - np.matmul(bPx, rot)*self.bondOH
+
+            self.dThree = self.HWOne + b2
 
 
-    def calcZMat(self, target, dihedInd):
+    def idealisedInt(self, target):
+
+        # Only calculate for
+
+
+    def calcZMat(self, target):
 
         numAtoms = len(self.atomIds)
-
-        # If donor then will be at 90˚ but otherwise - set to neighbour 1 and use function to get dihedral
-#        dihedMolInd = self.atomIds[dihedInd-1] + str(dihedInd)
-#        nAngle = gg.atomAngle(self.dOne, self.targMol, self.neighbours[0])
-#        dihed = gg.atomDihedral(self.dOne, self.targMol, self.neighbours[0], self.geometry[dihedInd-1])
-#        dOnezMat = {'x1': numAtoms+1, self.targMolID: 1.0, self.neighbourID: nAngle, dihedMolInd: dihed}
-#
-#        nAngle = gg.atomAngle(self.dTwo, self.targMol, self.neighbours[0])
-#        dihed = gg.atomDihedral(self.dTwo, self.targMol, self.neighbours[0], self.dOne)
-#        dTwozMat = {'x2': numAtoms+2, self.targMolID: 1.0, self.neighbourID: nAngle, 'x1': dihed}
 
         if target == 'don':
 
             # For water O has three opt vars and calculates initial values
-            OWzMat = {'Ow': numAtoms+3, self.targMolID: 'rAH', 'x1': 'OHx1', 'x2': 'OHx1x2'
+            OWzMat = {'Ow': numAtoms+3, self.targMolID: 'rDO', 'x1': 'OHx1', 'x2': 'OHx1x2'}
             OHx1 = gg.atomAngle(self.OW, self.targMol, self.dOne)
             OHx1x2 = gg.atomDihedral(self.OW, self.targMol, self.dOne, self.dTwo)
 
@@ -223,36 +235,27 @@ class waterPosition:
 
         elif target == 'acc':
 
-            # Define first H of water
+            # Trial one - add third dummy atom
             HWOnezMat = {'H1w': numAtoms+3, self.targMolID: 'rAH', 'x1': 'HAx1', 'x2': 'HAx1x2'}
-            # For water define at 180 to acceptor? and with variable for OHAx?
-            OWzMat = {'Ow': numAtoms+5, 'H1w': self.bondOH, 'x2': 'OHx2', self.targMolID: gg.atomDihedral(self.OW, self.HWOne, self.dTwo, self.targMol)}
-            HWTwozMat = {'H2w': numAtoms+6, 'Ow': self.bondOH, 'H1w': 104.52, self.targMolID: 'HOHA'}
+
+            ang = gg.atomAngle(self.OW, self.HWOne, self.dThree)
+            dihed = gg.atomDihedral(self.OW, self.HWOne, self.dThree, self.targMol)
+            OWzMat = {'Ow': numAtoms+5, 'H1w': self.bondOH, 'x3': ang, self.targMolID: dihed}
+
+            ang = gg.atomAngle(self.HWTwo, self.OW, self.targMol)
+            HWTwozMat = {'H2w': numAtoms+6, 'Ow': self.bondOH, self.targMolID: ang, 'x2': 'HOHA'}
 
             # Start value for one dihedral seems to be out so calculate?
-            OHx2Init = gg.atomAngle(self.OW, self.HWOne, self.dTwo)
-            HOHAInit = gg.atomDihedral(self.HWTwo, self.OW, self.HWOne, self.targMol)
-            optVar = {'rAH': 2.00, 'HAx1': 90.0, 'HAx1x2': 90.0, 'OHx2': OHx2Init, 'HOHA': HOHAInit}
-
-
-            # Using coords
-            HWOnezMat = {'H1w': numAtoms+3, self.targMolID: 'rAH', 'x1': 'HAx1', 'x2': 'HAx1x2'}
-            # For water define at 180 to acceptor? and with variable for OHAx?
-            OWzMat = {'Ow': numAtoms+5, 'H1w': self.bondOH, 'x2': 'OHx2', self.targMolID: 180.0}
-            HWTwozMat = {'H2w': numAtoms+6, 'Ow': self.bondOH, 'H1w': 104.52, self.targMolID: 'HOHA'}
-
-            # Start value for one dihedral seems to be out so calculate?
-            OHx2Init = gg.atomAngle(self.OW, self.HWOne, self.dTwo)
-            HOHAInit = gg.atomDihedral(self.HWTwo, self.OW, self.HWOne, self.targMol)
-            optVar = {'rAH': 2.00, 'HAx1': 90.0, 'HAx1x2': 90.0, 'OHx2': OHx2Init, 'HOHA': HOHAInit}
+            HOHAInit = gg.atomDihedral(self.HWTwo, self.OW, self.targMol, self.dTwo)
+            optVar = {'rAH': 2.00, 'HAx1': 90.0, 'HAx1x2': -90.0, 'HOHA': HOHAInit}
 
 
             zMatList = [HWOnezMat, OWzMat, HWTwozMat]
 
         with open('{}Int{}_ZMat.com'.format(target, self.targMolID), 'w') as output:
             print('%Chk={}Int{}_Zmat'.format(target, self.targMolID), file=output)
-            print('%NProcShared=24', file=output)
-            print('%Mem=61000MB', file=output)
+            print('%NProcShared=12', file=output)
+            print('%Mem=46000MB', file=output)
             print('#P HF/6-31G(d) Opt(Z-Matrix,MaxCycles=100) Geom(PrintInputOrient) SCF(Conver=9) Int(Grid=UltraFine)\n', file=output)
             print('Water {} interaction for {}\n'.format(target, self.targMolID), file=output)
             print('0 1', file=output)
@@ -262,6 +265,7 @@ class waterPosition:
             # Print both dummy atoms - don't need to be ZMat and should maintain consistency
             print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x1', self.dOne[:]), file=output)
             print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x2', self.dTwo[:]), file=output)
+            print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x3', self.dThree[:]), file=output)
             # Set z matrix input
             for atom in zMatList:
                 zMatInput = '{:<4}'.format(list(atom.keys())[0])
@@ -307,7 +311,7 @@ if __name__ == '__main__':
         1: str - geometry and atom ids input file
         2: str: acc or don to set target interaction
         3: int: index of acceptor or donor molecule
-        4: int/s: list of neighbour indexes - not seperated
+        4: ints: list of csv neighbour indexes
     '''
 
     # Pull optimised geometry from the file
@@ -321,7 +325,7 @@ if __name__ == '__main__':
     if target == 'don':
 
         donor = waterPosition(geometry, ids, 'don', int(sys.argv[3]), neighbours)
-        donor.donorSetUp(targMol)
+        donor.waterSetUp(target)
         donor.calcZMat(target)
 
         # Calculates and writes the z matrix or just coordinates
@@ -332,13 +336,13 @@ if __name__ == '__main__':
             for nB in range(4):
                 neighboursList = [neighbours[nB % 4], neighbours[(nB+1) % 4], neighbours[(nB+2) % 4]]
                 acceptor = waterPosition(geometry, ids, 'acc', int(sys.argv[3]), neighboursList)
-                acceptor.acceptorSetUp()
+                acceptor.waterSetUp(target)
                 acceptor.writeCoords(target+str(nB))
 
         else:
             acceptor = waterPosition(geometry, ids, 'acc', int(sys.argv[3]), neighbours)
-            acceptor.acceptorSetUp()
-            acceptor.calcZMat(target, 4)
+            acceptor.waterSetUp(target)
+            acceptor.calcZMat(target)
             acceptor.writeCoords(target)
 
 
