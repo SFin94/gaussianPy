@@ -3,7 +3,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def parseInfo(fileName, freqGoal):
+'''Script to print out the convergence information, opt trajectory and final energy for a job. Can optionally plot the optimisation trajectory if third argument included
+    Usage: [gaussOpt.py] fileName freqeuncyNumber (t)
+
+    Where:
+        filename: name of the log file (str; with .log extension)
+        freqeuncyNumber: number of lines (int) of freqeuncies to print out
+        t: Optional flag to include at the end if plot of optimisation trajectory wanted
+'''
+
+def parseInfo(fileName, freqGoal=1):
     energyOpt = []
     convStepCount = 0
     freqCount = 0
@@ -40,8 +49,12 @@ def plotTraj(energyTraj):
 
 if __name__ == '__main__':
 
-    numFreqs = int(sys.argv[2])
-    energyTraj = parseInfo(str(sys.argv[1]), numFreqs)
-    plotTraj(energyTraj)
+    if len(sys.argv) > 2:
+        energyTraj = parseInfo(str(sys.argv[1]), int(sys.argv[2]))
+    else: energyTraj = parseInfo(str(sys.argv[1]))
+
+    if len(sys.argv) > 3:
+        if sys.argv[3] == 't':
+            plotTraj(energyTraj)
 
 
