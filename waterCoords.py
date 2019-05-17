@@ -152,6 +152,60 @@ class waterPosition:
             self.dThree = self.HWOne + b2
 
 
+# Add in ZMat calculation which has only the angle and dihedral left to optimise and fixes the others
+    def calcIdealZMat(self, target):
+
+        numAtoms = len(self.atomIds)
+
+        if target == 'don':
+
+            # For ideal water O has one opt var and need to calculate angles and dihedrals
+            OHx1 = gg.atomAngle(self.OW, self.targMol, self.dOne)
+            OHx1x2 = gg.atomDihedral(self.OW, self.targMol, self.dOne, self.dTwo)
+            OWzMat = {'Ow': numAtoms+3, self.targMolID: 'rDO', 'x1': OHx1, 'x2': OHx1x2}
+
+            # For water H geom; both r: bondOH; both ang: donor H and diheds: to same dummy and  left to opt
+            Hw1A = (180 - 104.52/2.)
+            HWOnezMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.targMolID: Hw1A, 'x2': 'H1wOHx'}
+            HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.targMolID: Hw1A, 'x2': 'H2wOHx'}
+
+            # Calculate initial values for opt variables
+            H1wOHx = gg.atomDihedral(self.HWOne, self.OW, self.targMol, self.dTwo)
+            H2wOHx = gg.atomDihedral(self.HWTwo, self.OW, self.targMol, self.dTwo)
+            self.optVar = {'rDO': 2.00, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
+
+            # Set list for writing the Z matrix section
+            self.zMatList = [OWzMat, HWOnezMat, HWTwozMat]
+
+        elif target == 'acc':
+
+            # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (fixed)
+            HAx1 = gg.atomAngle(self.HWOne, self.targMol, self.dOne)
+            HAx1x2 = gg.atomDihedral(self.HWOne, self.targMol, self.dOne, self.dTwo)
+            HWOnezMat = {'H1w': numAtoms+3, self.targMolID: 'rAH', 'x1': HAx1, 'x2': HAx1x2}
+
+            # Define O using dummy on water - x3; angle to water H defined and dihed to Acceptor
+#            ODist = gg.atomDist(self.OW, self.dThree)
+#            OAng = gg.atomAngle(self.OW, self.dThree, self.HWOne)
+#            ODihed = gg.atomDihedral(self.OW, self.dThree, self.HWOne, self.targMol)
+#            OWzMat = {'Ow': numAtoms+4, 'x3': ODist, 'H1w': OAng, self.targMolID: ODihed}
+
+            # Second attempt trying to maintain linear interaction
+            OAng = gg.atomAngle(self.OW, self.HWOne, self.dOne)
+            ODihed = gg.atomDihedral(self.OW, self.HWOne, self.dOne, self.targMol)
+            OWzMat = {'Ow': numAtoms+4, 'H1w': self.bondOH, 'x2': OAng, self.targMolID: ODihed}
+
+            # Define 2nd H with r: OH bond distance to O; angle to Acceptor and dihed to dummy (left to opt)
+            H2Ang = gg.atomAngle(self.HWTwo, self.OW, self.targMol)
+            HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.targMolID: H2Ang, 'x2': 'HOAx'}
+
+            # Calculate initial values for opt variables
+            HOAx = gg.atomDihedral(self.HWTwo, self.OW, self.targMol, self.dTwo)
+            self.optVar = {'rAH': 2.00, 'HOAx': HOAx}
+
+            # Set list for writing the Z matrix section
+            self.zMatList = [HWOnezMat, OWzMat, HWTwozMat]
+
 
     def calcZMat(self, target):
 
@@ -177,11 +231,8 @@ class waterPosition:
 
         elif target == 'acc':
 
-            #dThreezMat = {'x3': numAtoms+2, 'x1': 2.00, self.targMolID: 90.00, 'x2': -90.00}
-            # Trial one - add third dummy atom
+            # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (opt)
             HWOnezMat = {'H1w': numAtoms+3, self.targMolID: 'rAH', 'x1': 'HAx1', 'x2': 'HAx1x2'}
-
-# Add dThree as second one and not defined by coordinates?
 
             ang = gg.atomAngle(self.OW, self.HWOne, self.dThree)
             dihed = gg.atomDihedral(self.OW, self.HWOne, self.dThree, self.targMol)
@@ -190,7 +241,6 @@ class waterPosition:
             ang = gg.atomAngle(self.OW, self.dThree, self.HWOne)
             dihed = gg.atomDihedral(self.OW, self.dThree, self.HWOne, self.targMol)
             OWzMat = {'Ow': numAtoms+4, 'x3': dist, 'H1w': ang, self.targMolID: dihed}
-
 
             ang = gg.atomAngle(self.HWTwo, self.OW, self.targMol)
             HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.targMolID: ang, 'x2': 'HOAx'}
@@ -202,9 +252,10 @@ class waterPosition:
             optVar = {'rAH': 2.00, 'HAx1': HAx1Init, 'HAx1x2': HAx1x2Init, 'HOAx': HOAxInit}
 
             zMatList = [HWOnezMat, OWzMat, HWTwozMat]
-            #zMatList = [dThreezMat, HWOnezMat, OWzMat, HWTwozMat]
 
-        with open('{}Int{}_ZMat.com'.format(target, self.targMolID), 'w') as output:
+
+    def writeZMat(self, target):
+        with open('{}Int{}_idealZMat.com'.format(target, self.targMolID), 'w') as output:
             print('%Chk={}Int{}_Zmat'.format(target, self.targMolID), file=output)
             print('%NProcShared=12', file=output)
             print('%Mem=46000MB', file=output)
@@ -220,7 +271,7 @@ class waterPosition:
             if target == 'acc':
                 print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x3', self.dThree[:]), file=output)
             # Set z matrix input
-            for atom in zMatList:
+            for atom in self.zMatList:
                 zMatInput = '{:<4}'.format(list(atom.keys())[0])
                 for entry in list(atom.items())[1:]:
                     if isinstance(entry[1], str):
@@ -232,7 +283,7 @@ class waterPosition:
 
             print('', file=output)
             # Enter initial variables
-            for var, inVal in optVar.items():
+            for var, inVal in self.optVar.items():
                 print('{:<8}{:>6.2f}'.format(var, inVal), file=output)
             print('\n\n', file=output)
 
@@ -281,7 +332,8 @@ if __name__ == '__main__':
 
         donor = waterPosition(geometry, ids, 'don', int(sys.argv[3]), neighbours)
         donor.waterSetUp(target)
-        donor.calcZMat(target)
+        donor.calcIdealZMat(target)
+        donor.writeZMat(target)
 
         # Calculates and writes the z matrix or just coordinates
 
@@ -297,8 +349,9 @@ if __name__ == '__main__':
         else:
             acceptor = waterPosition(geometry, ids, 'acc', int(sys.argv[3]), neighbours)
             acceptor.waterSetUp(target)
-            acceptor.calcZMat(target)
+            acceptor.calcIdealZMat(target)
+            acceptor.writeZMat(target)
             acceptor.writeCoords(target)
 
-
+# Now should be able to edit final section as doesn't need to be seperate - does it need to even be a class?
 
