@@ -73,24 +73,40 @@ nProc = 12
 memMB = 45000
 
 # Set the job type and job title
+
+'''
+    Current default job types available are:
+        Default: Opt, Freq
+        Opt (w/woutModRedundant flag set)
+        Freq
+        TS: Opt(TS,NoEigen,RCFC) Freq
+        Scan: Opt(ModRedundant,MaxCycles=100), sets ModRedundant flag to True and default proc and mem
+        Own: Own input (str)
+
+        should be able to build (o, f) then other options
+    '''
+
 jobType = ''
 jobTitle = fileName
 for jT in args.jobType:
-    if jT == 'opt':
+    if jT.lower() == 'opt':
         if args.modRed == True:
             jobType += 'Opt(ModRedundant) '
         else: jobType += 'Opt '
-    if jT == 'reopt':
+    if jT.lower() == 'reopt':
         jobType += 'Opt(RCFC) '
-    if jT == 'freq':
+    if jT.lower() == 'freq':
         jobType += 'Freq '
-    if jT == 'TS':
+    if jT.lower() == 'ts':
         jobType += 'Opt(TS,NoEigen,RCFC) Freq '
-    if jT == 'scan':
+    if jT.lower() == 'scan':
         jobType += 'Opt(ModRedundant,MaxCycles=100) '
         args.modRed = True
         nProc = 24
         memMB = 58000
+    if jT.lower() == 'own':
+        jobType += input("Enter job inputs as they would appear in Gaussian.com file:\n")
+    print(jobType)
     jobTitle = jobTitle + ' ' + jT
 
 # Adds SCRF command and SMD for solvation in water if flag raised at input
