@@ -1,5 +1,4 @@
 import numpy as np
-import os
 import sys
 
 
@@ -7,15 +6,14 @@ import sys
 '''
 
 
-
-def geomPull(inputFile, numAtoms, optStep=1):
+def geomPulllog(inputFile, numAtoms, optStep=1):
 
     '''Function which extracts the optimised geometry of a molecule in the standard orientation from a Guassian .log file. NB: The standard orientation output is at the start of the next optimisation (?) cycle, before 'Optimization' would be met.
 
     Parameters:
      inputFile: Str - name of the input log file
      numAtoms: Int - The number of atoms in the system
-     oprtStep: Int - Optional argument, the optimised structure number wanted from the file (intermediate structure may be desired from a scan calculation. Default value = 1.
+     optStep: Int - Optional argument, the optimised structure number wanted from the file (intermediate structure may be desired from a scan calculation. Default value = 1.
 
      Returns:
       molCoords: Numpy array (dim: numAtoms, 3) (float) - Results array of x, y, z coordinates for each atom
@@ -46,8 +44,50 @@ def geomPull(inputFile, numAtoms, optStep=1):
                 return(molCoords)
     return(molCoords)
 
+def geomPullxyz(inputFile):
+
+    '''Function which extracts the optimised geometry of a molecule from an .xyz file.
+
+        Parameters:
+         inputFile: Str - name of the input log file
+
+        Returns:
+         molCoords: Numpy array (dim: numAtoms, 3) (float) - Results array of x, y, z coordinates for each atom
+        '''
+
+    # Open and read input file
+    with open(inputFile, 'r') as xyzFile:
+
+        for el in xyzFile:
+
+            # Set atom number from first line of xyz file
+            numAtoms = int(el.strip())
+            [xyzFile.__next__() for i in range(1)]
+
+            molCoords = np.zeros((numAtoms, 3))
+            atomIDs = []
+
+            # Read in the atomic coordinates, atom ID will be row index
+            for ind in range(numAtoms):
+                el = xyzFile.__next__()
+                atomIDs.append(str(el.split()[0]))
+                for jind in range(1, 3):
+                    molCoords[ind, jind] = float(el.split()[jind])
+
+    return(molCoords, atomIDs)
+
 
 def atomIdentify(inputFile, numAtoms):
+
+    '''Function which extracts the atom IDs from a gaussian log file.
+
+        Parameters:
+         inputFile: Str - name of the input log file
+         numAtoms: Int - The number of atoms in the system
+
+         Returns:
+          atomIDs: List of str - atom IDs
+        '''
 
     atomIDs = []
     with open(inputFile, 'r') as logFile:
@@ -128,15 +168,15 @@ def atomDihedral(atomOne, atomTwo, atomThree, atomFour):
 
     Returns:
      dihedral - float; dihedral angle between the planes: (atomOne, Two, Three) and (atomTwo, Three, Four)
-        '''
+    '''
 
-    bOneVec = atomOne - atomTwo
+    bOneVec = atomTwo - atomOne
     bTwoVec = atomThree - atomTwo
     bThreeVec = atomFour - atomThree
 
     # Calculate the norms to the planes
     nOne = np.cross(bOneVec, bTwoVec)
-    nTwo = np.cross(bThreeVec, bTwoVec)
+    nTwo = np.cross(bTwoVec, bThreeVec)
 
     # Normalise the two vectors
     nOne /= np.linalg.norm(nOne)
@@ -150,7 +190,7 @@ def atomDihedral(atomOne, atomTwo, atomThree, atomFour):
     x = np.dot(nTwo, nOne)
     y = np.dot(nTwo, mOne)
 
-    return np.arctan2(y, x)*(180/np.pi)
+    return(np.arctan2(-y, x)*(180/np.pi))
 
 
 #if __name__ == '__main__':
