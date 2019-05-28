@@ -6,7 +6,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 # GS process
-def gsProcess(xVec, *bVecs):
+def gramScmidt(xVec, *bVecs):
 
     '''Function which calculates a new orthogonal basis vector by the Gram Shcmidt process'''
 
@@ -16,72 +16,147 @@ def gsProcess(xVec, *bVecs):
     bNew = xVec - sum
     return(bNew)
 
-def tripleProd(nBonds):
+
+def tripleProduct(nBonds):
+
+    '''Function which calculates the triple product for three vectors)
+
+        Parameters:
+        nBonds: List of three vectors
+
+        Returns:
+        tripleProd: float - triple product of the three
+        '''
+
     nBcross = np.cross(nBonds[0], nBonds[1])
-    nBtripleProd = np.dot(nBonds[2], nBcross)
-    return(nBtripleProd)
+    tripleProd = np.dot(nBonds[2], nBcross)
+    return(tripleProd)
 
-class waterPosition:
 
-    # Set geometry constants for TIP3P water molecule
+# Rotation around y axis
+def rotationY(feta, inVec, bOne = np.array([1., 0., 0.]), bTwo = np.array([0., 1., 0.]), bThree = np.array([0., 1., 0.])):
+
+    '''Function which applies a rotation around the y axis (in the standard basis) by an input angle (feta)
+
+        Parameters:
+        feta: float - angle the vector is to be rotated around (radians)
+        inVec: numpy array (dim: 1x3) - the vector to be rotated
+        Optional parameters:
+        bOne, bTwo, bThree: numpy arrays (dim: 1x3) - Standard basis or alternative basis if set (not sure matrix is then applicable though?)
+        '''
+
+    tX, tY, tZ = np.zeros(3), np.zeros(3), np.zeros(3)
+    outVec = np.zeros(3)
+    for bInd, bVec in enumerate([bOne, bTwo, bThree]):
+        tX[bInd] = bVec[0]*np.cos(feta) + bVec[2]*np.sin(feta)
+        tY[bInd] = bVec[1]
+        tZ[bInd] = bVec[2]*np.cos(feta) - bVec[0]*np.sin(feta)
+
+    outVec = np.array([np.dot(tX, inVec), np.dot(tY, inVec), np.dot(tZ, inVec)])
+
+    return(outVec)
+
+
+
+class InteractionSite:
+
+    ''' Class - creates object for each water position to be set up
+
+        Attributes:
+            siteInd: int - molecular index of the donor/acceptor site
+            neighbourInd: List of ints - molecular indexes for the covalently bonded neighbours of the sites.
+            siteType: str - 'don'/'acc', denoting the type of interaction to be set up
+    '''
+
+    #tip3P geometry
     bondOH = 0.9572
     angleHOH = np.radians(104.52)
-    angles = [-(np.pi-angleHOH)/2, -(np.pi+angleHOH)/2]
 
-    # Attributes: water positions: OW; HWOne; HWTwo and dummy positions dOne; dTwo
+    def __init__(self, raw):
 
-    def __init__(self, geometry, ids, target, targMolInd, neighbourInds):
+        # Set the index of the target mol
+        self.atomInd = int(raw[0])
 
-        '''
-        Initilises class and sets the object attributes: geometry, atomIds, neighbours (neighbour xyz positions)
+        # Set the list of covalently bonded neighbours
+        self.neighbourInd = []
+        for nB in raw[1].split(','):
+            self.neighbourInd.append(int(nB))
 
-        Parameters:
-         geometry - np.array (dim: nAtom x 3): x, y, z coordinates for each atom in molecule
-         ids - list (len: nAtoms): Atomic symbol for each atom in molecule
-         target - str: 'acc' or 'don' which decides set up route of the water
-         targMol - int: atom index of the acceptor or donor atom of the molecule
-         neighbourInds - int (len: no. of neighbours): atom indexes of the covalently bonded neighbours to the acceptor/donor atom
-        '''
+        # Assign the type of site to be set up
+        self.siteType = str(raw[2])
 
-        # Set IDs and geometries as object attributes, add neighbours?
-        self.atomIds = ids
-        self.geometry = geometry
-        self.targMol = geometry[targMolInd-1]
 
-        # Set the ID string for a neighbour atom and the donor/acceptor target atom
-        self.targMolID = self.atomIds[targMolInd-1] + str(targMolInd)
-        self.neighbourID = self.atomIds[int(neighbourInds[0])-1] + neighbourInds[0]
+    def localGeom(self, geometry):
 
-        # Set neighbours list with xyz coords of colvalently bonded neighbours
+        self.coords = geometry[self.atomInd-1]
         self.neighbours = []
-        for nB in neighbourInds:
-            self.neighbours.append(self.geometry[int(nB) - 1])
+        for nbInd in self.neighbourInd:
+            self.neighbours.append(geometry[nbInd-1])
+
+    def bVectors(self, neighbourBonds):
+
+        # Find centroid of the bonds and normalise
+        b1 = np.array([0., 0., 0.])
+        for nB in neighbourBonds:
+            b1 += nB
+            b1 /= len(neighbourBonds)
+            b1 /= np.linalg.norm(b1)
+
+         # Find orthonormal basis with b1 using cross products (GS process alternative works but was unnecessary as orthogonal basis already created)
+        b2 = np.cross(self.coords, b1)
+        b2 /= np.linalg.norm(b2)
+        b3 = np.cross(b2, b1)
+        b3 /= np.linalg.norm(b3)
+
+        # Order of basis vectors is due to rotation later around y axis
+        self.bBasis = np.array([b2, b3, b1])
 
 
-    # Rotation around y axis
-    def rotationY(self, feta, inVec, bOne = np.array([1., 0., 0.]), bTwo = np.array([0., 1., 0.]), bThree = np.array([0., 1., 0.])):
+class DonorInt(InteractionSite):
 
-        '''Function which applies a rotation around the y axis (in the standard basis) by an input angle
+    def waterPosition(self):
 
-        Parameters:
-         feta - float: angle the vector is to be rotated around (radians)
-         inVec - numpy array (dim: 1x3): the vector to be rotated
-        Optional parameters:
-         bOne, bTwo, bThree - numpy arrays (dim: 1x3): Standard basis or alternative basis if set (not sure matrix is then applicable though?)
-        '''
+        # Position the oxygen off the donor H
+        self.OW = self.coords - self.bBasis[2]*2
 
-        tX, tY, tZ = np.zeros(3), np.zeros(3), np.zeros(3)
-        outVec = np.zeros(3)
-        for bInd, bVec in enumerate([bOne, bTwo, bThree]):
-            tX[bInd] = bVec[0]*np.cos(feta) + bVec[2]*np.sin(feta)
-            tY[bInd] = bVec[1]
-            tZ[bInd] = bVec[2]*np.cos(feta) - bVec[0]*np.sin(feta)
+        angles = [-(np.pi-self.angleHOH)/2, -(np.pi+self.angleHOH)/2]
 
-        outVec = np.array([np.dot(tX, inVec), np.dot(tY, inVec), np.dot(tZ, inVec)])
+        # Rotate standard basis by desired angles around the y axis
+        rotOne = rotationY(angles[0], np.array([1., 0., 0.]))
+        rotTwo = rotationY(angles[1], np.array([1., 0., 0.]))
 
-        return(outVec)
+        # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
+        bPx = self.bBasis.transpose()
+            # Transform the rotation vectors for the water H's to the donor basis, scale, and add to the water O
+        self.HWOne = np.matmul(bPx, rotOne)*self.bondOH + self.OW
+        self.HWTwo = np.matmul(bPx, rotTwo)*self.bondOH + self.OW
 
-    def waterSetUp(self, target):
+        def dummyPosition(self):
+
+            self.dThree = self.HWOne + self.bBasis[0]
+
+
+class AcceptorInt(InteractionSite):
+
+    def waterPosition(self):
+
+        self.HWOne = self.coords - self.bBasis[2]*2
+        # Position O bond distance away from the H
+        self.OW = self.HWOne - self.bBasis[2]*self.bondOH
+
+        # For second OH bond the angle will be angleHOH - 90
+        rot = rotationY(-(angleHOH - 0.5*np.pi), np.array([1., 0., 0.]))
+        # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
+        bPx = self.bBasis.transpose()
+        # Transform the rotation vectors for the second water H to the donor basis, scale, and add to the water O
+        self.HWTwo = self.OW - np.matmul(bPx, rot)*self.bondOH
+
+    def dummyPosition(self):
+
+        self.dThree = self.HWOne + self.bBasis[0]
+
+
+def waterSetUp(siteList):
 
         '''Function to set up water molecule with acceptor interaction - calculates the b1 vector dependant on the number of covalently bonded neighbours and updates the water and dummy atom positons for the object through the acceptorCalc function
 
@@ -92,266 +167,243 @@ class waterPosition:
 
         # Calculate the neighbouring bonds between neighbouring positons
         cBonds = []
-        for nB in self.neighbours:
-            cInitial = nB - self.targMol
-            cBonds.append(cInitial)
+        for site in siteList:
+            for nB in site.neighbours:
+                cInitial = nB - site.coords
+                cBonds.append(cInitial)
 
-        # Find centroid of the bonds and normalise
-        b1 = np.array([0., 0., 0.])
-        for cB in cBonds:
-            b1 += cB
-        b1 /= len(cBonds)
-        b1 /= np.linalg.norm(b1)
+        # Set the basis vectors from the site
+            site.bVectors(cBonds)
 
-        # Find orthonormal basis with b1 using cross products (GS process alternative works but was unnecessary as orthogonal basis already created)
-        b2 = np.cross(self.targMol, b1)
-        b2 /= np.linalg.norm(b2)
-        b3 = np.cross(b2, b1)
-        b3 /= np.linalg.norm(b3)
+        # Test the triple product of the neighbour bond vectors
+        # If close to 0 then they lie in the same plane and switch b1 for the orthogonal b2 or b3
+            if len(cBonds) == 3:
+                print(site.bBasis)
+                if tripleProduct(cBonds) < 1e-03:
+                    test = []
+                    if abs(tripleProduct([cBonds[0], cBonds[1], site.bBasis[0]])) < 1e-03:
+                        site.bBasis[[1, 2]] = site.bBasis[[2, 1]]
+                    else: site.bBasis[[0, 2]] = site.bBasis[[2, 0]]
 
-#         Have that b2 or b3 would be the ones orthogonal to the bonding plane - would want to set that one as b1
-#         Test triple product; if close to 0 then in same plane
-        if len(cBonds) == 3:
-            if tripleProd(cBonds) < 1e-03:
-                if abs(tripleProd([cBonds[0], cBonds[1], b2])) < 1e-03:
-                    b3, b1 = b1, b3
-                elif abs(tripleProd([cBonds[0], cBonds[1], b3])) < 1e-03:
-                    b2, b1 = b1, b2
-
-        # Define dummy atoms for angles from the H donor
-        self.dOne = self.targMol + b2
-        self.dTwo = self.targMol + b3
-
-        if target == 'don':
-
-            self.OW = self.targMol - b1*2
-
-            # Rotate standard basis by desired angles around the y axis
-            rotOne = self.rotationY(self.angles[0], np.array([1., 0., 0.]))
-            rotTwo = self.rotationY(self.angles[1], np.array([1., 0., 0.]))
-
-            # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
-            bPx = np.array([b2, b3, b1]).transpose()
-            # Transform the rotation vectors for the water H's to the donor basis, scale, and add to the water O
-            self.HWOne = np.matmul(bPx, rotOne)*self.bondOH + self.OW
-            self.HWTwo = np.matmul(bPx, rotTwo)*self.bondOH + self.OW
-
-        elif target == 'acc':
-
-            self.HWOne = self.targMol - b1*2
-            # Position O bond distance away from the H
-            self.OW = self.HWOne - b1*self.bondOH
-
-            # For second OH bond the angle will be angleHOH - 90
-            rot = self.rotationY(-(self.angleHOH - 0.5*np.pi), np.array([1., 0., 0.]))
-            # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
-            bPx = np.array([b2, b3, b1]).transpose()
-            # Transform the rotation vectors for the second water H to the donor basis, scale, and add to the water O
-            self.HWTwo = self.OW - np.matmul(bPx, rot)*self.bondOH
-
-            self.dThree = self.HWOne + b2
+        site.waterPosition()
+        site.dummyPosition()
 
 
 # Add in ZMat calculation which has only the angle and dihedral left to optimise and fixes the others
-    def calcIdealZMat(self, target):
 
-        numAtoms = len(self.atomIds)
+def calcIdealZMat(self, target):
 
-        if target == 'don':
+    numAtoms = len(self.atomIds)
 
-            # For ideal water O has one opt var and need to calculate angles and dihedrals
-            OHx1 = gg.atomAngle(self.OW, self.targMol, self.dOne)
-            OHx1x2 = gg.atomDihedral(self.OW, self.targMol, self.dOne, self.dTwo)
-            OWzMat = {'Ow': numAtoms+3, self.targMolID: 'rDO', 'x1': OHx1, 'x2': OHx1x2}
+    if target == 'don':
 
-            # For water H geom; both r: bondOH; both ang: donor H and diheds: to same dummy and  left to opt
-            Hw1A = (180 - 104.52/2.)
-            HWOnezMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.targMolID: Hw1A, 'x2': 'H1wOHx'}
-            HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.targMolID: Hw1A, 'x2': 'H2wOHx'}
+        # For ideal water O has one opt var and need to calculate angles and dihedrals
+        OHx1 = gg.atomAngle(self.OW, self.targMol, self.dOne)
+        OHx1x2 = gg.atomDihedral(self.OW, self.targMol, self.dOne, self.dTwo)
+        OWzMat = {'Ow': numAtoms+3, self.targMolID: 'rDO', 'x1': OHx1, 'x2': OHx1x2}
 
-            # Calculate initial values for opt variables
-            H1wOHx = gg.atomDihedral(self.HWOne, self.OW, self.targMol, self.dTwo)
-            H2wOHx = gg.atomDihedral(self.HWTwo, self.OW, self.targMol, self.dTwo)
-            self.optVar = {'rDO': 2.00, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
+        # For water H geom; both r: bondOH; both ang: donor H and diheds: to same dummy and  left to opt
+        Hw1A = (180 - 104.52/2.)
+        HWOnezMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.targMolID: Hw1A, 'x2': 'H1wOHx'}
+        HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.targMolID: Hw1A, 'x2': 'H2wOHx'}
 
-            # Set list for writing the Z matrix section
-            self.zMatList = [OWzMat, HWOnezMat, HWTwozMat]
+        # Calculate initial values for opt variables
+        H1wOHx = gg.atomDihedral(self.HWOne, self.OW, self.targMol, self.dTwo)
+        H2wOHx = gg.atomDihedral(self.HWTwo, self.OW, self.targMol, self.dTwo)
+        self.optVar = {'rDO': 2.00, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
 
-        elif target == 'acc':
+        # Set list for writing the Z matrix section
+        self.zMatList = [OWzMat, HWOnezMat, HWTwozMat]
 
-            # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (fixed)
-            HAx1 = gg.atomAngle(self.HWOne, self.targMol, self.dOne)
-            HAx1x2 = gg.atomDihedral(self.HWOne, self.targMol, self.dOne, self.dTwo)
-            HWOnezMat = {'H1w': numAtoms+3, self.targMolID: 'rAH', 'x1': HAx1, 'x2': HAx1x2}
+    elif target == 'acc':
 
-            # Define O using dummy on water - x3; angle to water H defined and dihed to Acceptor
-#            ODist = gg.atomDist(self.OW, self.dThree)
-#            OAng = gg.atomAngle(self.OW, self.dThree, self.HWOne)
-#            ODihed = gg.atomDihedral(self.OW, self.dThree, self.HWOne, self.targMol)
-#            OWzMat = {'Ow': numAtoms+4, 'x3': ODist, 'H1w': OAng, self.targMolID: ODihed}
+        # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (fixed)
+        HAx1 = gg.atomAngle(self.HWOne, self.targMol, self.dOne)
+        HAx1x2 = gg.atomDihedral(self.HWOne, self.targMol, self.dOne, self.dTwo)
+        HWOnezMat = {'H1w': numAtoms+3, self.targMolID: 'rAH', 'x1': HAx1, 'x2': HAx1x2}
 
-            # Second attempt trying to maintain linear interaction
-            OAng = gg.atomAngle(self.OW, self.HWOne, self.dOne)
-            ODihed = gg.atomDihedral(self.OW, self.HWOne, self.dOne, self.targMol)
-            OWzMat = {'Ow': numAtoms+4, 'H1w': self.bondOH, 'x2': OAng, self.targMolID: ODihed}
+        # Second attempt trying to maintain linear interaction
+        OAng = gg.atomAngle(self.OW, self.HWOne, self.dOne)
+        ODihed = gg.atomDihedral(self.OW, self.HWOne, self.dOne, self.targMol)
+        OWzMat = {'Ow': numAtoms+4, 'H1w': self.bondOH, 'x2': OAng, self.targMolID: ODihed}
 
-            # Define 2nd H with r: OH bond distance to O; angle to Acceptor and dihed to dummy (left to opt)
-            H2Ang = gg.atomAngle(self.HWTwo, self.OW, self.targMol)
-            HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.targMolID: H2Ang, 'x2': 'HOAx'}
+        # Define 2nd H with r: OH bond distance to O; angle to Acceptor and dihed to dummy (left to opt)
+        H2Ang = gg.atomAngle(self.HWTwo, self.OW, self.targMol)
+        HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.targMolID: H2Ang, 'x2': 'HOAx'}
 
-            # Calculate initial values for opt variables
-            HOAx = gg.atomDihedral(self.HWTwo, self.OW, self.targMol, self.dTwo)
-            self.optVar = {'rAH': 2.00, 'HOAx': HOAx}
+        # Calculate initial values for opt variables
+        HOAx = gg.atomDihedral(self.HWTwo, self.OW, self.targMol, self.dTwo)
+        self.optVar = {'rAH': 2.00, 'HOAx': HOAx}
 
-            # Set list for writing the Z matrix section
-            self.zMatList = [HWOnezMat, OWzMat, HWTwozMat]
+        # Set list for writing the Z matrix section
+        self.zMatList = [HWOnezMat, OWzMat, HWTwozMat]
 
 
-    def calcZMat(self, target):
+def calcZMat(self, target):
 
-        numAtoms = len(self.atomIds)
+    numAtoms = len(self.atomIds)
 
-        if target == 'don':
+    if target == 'don':
 
-            # For water O has three opt vars and calculates initial values
-            OWzMat = {'Ow': numAtoms+3, self.targMolID: 'rDO', 'x1': 'OHx1', 'x2': 'OHx1x2'}
-            OHx1 = gg.atomAngle(self.OW, self.targMol, self.dOne)
-            OHx1x2 = gg.atomDihedral(self.OW, self.targMol, self.dOne, self.dTwo)
+        # For water O has three opt vars and calculates initial values
+        OWzMat = {'Ow': numAtoms+3, self.targMolID: 'rDO', 'x1': 'OHx1', 'x2': 'OHx1x2'}
+        OHx1 = gg.atomAngle(self.OW, self.targMol, self.dOne)
+        OHx1x2 = gg.atomDihedral(self.OW, self.targMol, self.dOne, self.dTwo)
 
-            # For water H geom; both r: bondOH; angle of first to H; second to water angleHOH; do dihedrals to first dummy
-            Hw1A = (180 - 104.52/2.)
-            HWOnezMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.targMolID: Hw1A, 'x2': 'H1wOHx'}
-            HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.targMolID: Hw1A, 'x2': 'H2wOHx'}
+        # For water H geom; both r: bondOH; angle of first to H; second to water angleHOH; do dihedrals to first dummy
+        Hw1A = (180 - 104.52/2.)
+        HWOnezMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.targMolID: Hw1A, 'x2': 'H1wOHx'}
+        HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.targMolID: Hw1A, 'x2': 'H2wOHx'}
 
-            H1wOHx = gg.atomDihedral(self.HWOne, self.OW, self.targMol, self.dTwo)
-            H2wOHx = gg.atomDihedral(self.HWTwo, self.OW, self.targMol, self.dTwo)
+        H1wOHx = gg.atomDihedral(self.HWOne, self.OW, self.targMol, self.dTwo)
+        H2wOHx = gg.atomDihedral(self.HWTwo, self.OW, self.targMol, self.dTwo)
 
-            optVar = {'rDO': 2.00, 'OHx1': OHx1, 'OHx1x2': OHx1x2, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
-            zMatList = [OWzMat, HWOnezMat, HWTwozMat]
+        optVar = {'rDO': 2.00, 'OHx1': OHx1, 'OHx1x2': OHx1x2, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
+        zMatList = [OWzMat, HWOnezMat, HWTwozMat]
 
-        elif target == 'acc':
+    elif target == 'acc':
 
-            # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (opt)
-            HWOnezMat = {'H1w': numAtoms+3, self.targMolID: 'rAH', 'x1': 'HAx1', 'x2': 'HAx1x2'}
+        # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (opt)
+        HWOnezMat = {'H1w': numAtoms+3, self.targMolID: 'rAH', 'x1': 'HAx1', 'x2': 'HAx1x2'}
 
-            ang = gg.atomAngle(self.OW, self.HWOne, self.dThree)
-            dihed = gg.atomDihedral(self.OW, self.HWOne, self.dThree, self.targMol)
-#            OWzMat = {'Ow': numAtoms+5, 'H1w': self.bondOH, 'x3': ang, self.targMolID: dihed}
-            dist = gg.atomDist(self.OW, self.dThree)
-            ang = gg.atomAngle(self.OW, self.dThree, self.HWOne)
-            dihed = gg.atomDihedral(self.OW, self.dThree, self.HWOne, self.targMol)
-            OWzMat = {'Ow': numAtoms+4, 'x3': dist, 'H1w': ang, self.targMolID: dihed}
+        ang = gg.atomAngle(self.OW, self.HWOne, self.dThree)
+        dihed = gg.atomDihedral(self.OW, self.HWOne, self.dThree, self.targMol)
 
-            ang = gg.atomAngle(self.HWTwo, self.OW, self.targMol)
-            HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.targMolID: ang, 'x2': 'HOAx'}
+        dist = gg.atomDist(self.OW, self.dThree)
+        ang = gg.atomAngle(self.OW, self.dThree, self.HWOne)
+        dihed = gg.atomDihedral(self.OW, self.dThree, self.HWOne, self.targMol)
+        OWzMat = {'Ow': numAtoms+4, 'x3': dist, 'H1w': ang, self.targMolID: dihed}
 
-            # Start value for one dihedral seems to be out so calculate?
-            HAx1Init = gg.atomAngle(self.HWOne, self.targMol, self.dOne)
-            HAx1x2Init = gg.atomDihedral(self.HWOne, self.targMol, self.dOne, self.dTwo)
-            HOAxInit = gg.atomDihedral(self.HWTwo, self.OW, self.targMol, self.dTwo)
-            optVar = {'rAH': 2.00, 'HAx1': HAx1Init, 'HAx1x2': HAx1x2Init, 'HOAx': HOAxInit}
+        ang = gg.atomAngle(self.HWTwo, self.OW, self.targMol)
+        HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.targMolID: ang, 'x2': 'HOAx'}
 
-            zMatList = [HWOnezMat, OWzMat, HWTwozMat]
+        # Start value for one dihedral seems to be out so calculate?
+        HAx1Init = gg.atomAngle(self.HWOne, self.targMol, self.dOne)
+        HAx1x2Init = gg.atomDihedral(self.HWOne, self.targMol, self.dOne, self.dTwo)
+        HOAxInit = gg.atomDihedral(self.HWTwo, self.OW, self.targMol, self.dTwo)
+        optVar = {'rAH': 2.00, 'HAx1': HAx1Init, 'HAx1x2': HAx1x2Init, 'HOAx': HOAxInit}
 
-
-    def writeZMat(self, target):
-        with open('{}Int{}_idealZMat.com'.format(target, self.targMolID), 'w') as output:
-            print('%Chk={}Int{}_Zmat'.format(target, self.targMolID), file=output)
-            print('%NProcShared=12', file=output)
-            print('%Mem=46000MB', file=output)
-            print('#P HF/6-31G(d) Opt(Z-Matrix,MaxCycles=100) Geom(PrintInputOrient) SCF(Conver=9) Int(Grid=UltraFine)\n', file=output)
-            print('Water {} interaction for {}\n'.format(target, self.targMolID), file=output)
-            print('0 1', file=output)
-            # Print original molecular geometry
-            for atomInd, el in enumerate(self.geometry):
-                print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format((self.atomIds[atomInd])+str(atomInd+1), el[:]), file=output)
-            # Print both dummy atoms - don't need to be ZMat and should maintain consistency
-            print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x1', self.dOne[:]), file=output)
-            print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x2', self.dTwo[:]), file=output)
-            if target == 'acc':
-                print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x3', self.dThree[:]), file=output)
-            # Set z matrix input
-            for atom in self.zMatList:
-                zMatInput = '{:<4}'.format(list(atom.keys())[0])
-                for entry in list(atom.items())[1:]:
-                    if isinstance(entry[1], str):
-                        zMatInput += '{:>4}{: >8}'.format(entry[0], entry[1])
-                    else:
-                        zMatInput += '{:>4}{: >8.2f}'.format(entry[0], entry[1])
-
-                print(zMatInput, file=output)
-
-            print('', file=output)
-            # Enter initial variables
-            for var, inVal in self.optVar.items():
-                print('{:<8}{:>6.2f}'.format(var, inVal), file=output)
-            print('\n\n', file=output)
+        zMatList = [HWOnezMat, OWzMat, HWTwozMat]
 
 
-    def writeCoords(self, target):
+def writeZMat(self, target):
+    with open('{}Int{}_idealZMat.com'.format(target, self.targMolID), 'w') as output:
+        print('%Chk={}Int{}_Zmat'.format(target, self.targMolID), file=output)
+        print('%NProcShared=12', file=output)
+        print('%Mem=46000MB', file=output)
+        print('#P HF/6-31G(d) Opt(Z-Matrix,MaxCycles=100) Geom(PrintInputOrient) SCF(Conver=9) Int(Grid=UltraFine)\n', file=output)
+        print('Water {} interaction for {}\n'.format(target, self.targMolID), file=output)
+        print('0 1', file=output)
+        # Print original molecular geometry
+        for atomInd, el in enumerate(self.geometry):
+            print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format((self.atomIds[atomInd])+str(atomInd+1), el[:]), file=output)
+        # Print both dummy atoms - don't need to be ZMat and should maintain consistency
+        print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x1', self.dOne[:]), file=output)
+        print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x2', self.dTwo[:]), file=output)
+        if target == 'acc':
+            print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x3', self.dThree[:]), file=output)
+        # Set z matrix input
+        for atom in self.zMatList:
+            zMatInput = '{:<4}'.format(list(atom.keys())[0])
+            for entry in list(atom.items())[1:]:
+                if isinstance(entry[1], str):
+                    zMatInput += '{:>4}{: >8}'.format(entry[0], entry[1])
+                else:
+                    zMatInput += '{:>4}{: >8.2f}'.format(entry[0], entry[1])
 
-        with open('{}Int{}_coords.com'.format(target, self.targMolID), 'w') as output:
-            print('%Chk={}Int{}'.format(target, self.targMolID), file=output)
-            print('%NProcShared=24', file=output)
-            print('%Mem=61000MB', file=output)
-            print('#P HF/6-31G(d) Opt(MaxCycles=100) Geom(PrintInputOrient) SCF(Conver=9) Int(Grid=UltraFine)\n', file=output)
-            print('Water {} interaction for {}\n'.format(target, self.targMolID), file=output)
-            print('0 1', file=output)
-            # Print original molecular geometry
-            for atomInd, el in enumerate(self.geometry):
-                print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format((self.atomIds[atomInd]), el[:]), file=output)
-            print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x1', self.dOne[:]), file=output)
-            print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x2', self.dTwo[:]), file=output)
-            if target == 'acc':
-                print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x3', self.dThree[:]), file=output)
-            print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('Ow', self.OW[:]), file=output)
-            print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('H1w', self.HWOne[:]), file=output)
-            print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('H2w', self.HWTwo[:]), file=output)
-            print('\n\n', file=output)
+            print(zMatInput, file=output)
+
+        print('', file=output)
+        # Enter initial variables
+        for var, inVal in self.optVar.items():
+            print('{:<8}{:>6.2f}'.format(var, inVal), file=output)
+        print('\n\n', file=output)
+
+
+def writeCoords(self, target):
+
+    with open('{}Int{}_coords.com'.format(target, self.targMolID), 'w') as output:
+        print('%Chk={}Int{}'.format(target, self.targMolID), file=output)
+        print('%NProcShared=24', file=output)
+        print('%Mem=61000MB', file=output)
+        print('#P HF/6-31G(d) Opt(MaxCycles=100) Geom(PrintInputOrient) SCF(Conver=9) Int(Grid=UltraFine)\n', file=output)
+        print('Water {} interaction for {}\n'.format(target, self.targMolID), file=output)
+        print('0 1', file=output)
+        # Print original molecular geometry
+        for atomInd, el in enumerate(self.geometry):
+            print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format((self.atomIds[atomInd]), el[:]), file=output)
+        print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x1', self.dOne[:]), file=output)
+        print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x2', self.dTwo[:]), file=output)
+        if target == 'acc':
+            print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x3', self.dThree[:]), file=output)
+        print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('Ow', self.OW[:]), file=output)
+        print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('H1w', self.HWOne[:]), file=output)
+        print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('H2w', self.HWTwo[:]), file=output)
+        print('\n\n', file=output)
 
 
 
 if __name__ == '__main__':
 
-    '''Input arguments:
-        1: str - geometry and atom ids input file
-        2: str: acc or don to set target interaction
-        3: int: index of acceptor or donor molecule
-        4: ints: list of csv neighbour indexes
-    '''
+# Input file format: siteInd neighbourInds target lp(optional)
 
-    # Pull optimised geometry from the file
-    inputFile = str(sys.argv[1])
-    geometry = gg.geomPulllog(inputFile, 7)
-    ids = gg.atomIdentify(inputFile, 7)
-    # Set target interation as either donor or acceptor for set up and neighbours
-    target = str(sys.argv[2]).lower()
-    neighbours = str(sys.argv[4]).split(',')
+# Want to edit so either single command line argument or multiple at once
+# If an input file then it will have geometry store - but same for each molecule
+# then input rows of atomInd neighbours don/acc
 
-    if target == 'don':
+    with open(str(sys.argv[1]), 'r') as inputFile:
+        input = inputFile.readlines()
 
-        donor = waterPosition(geometry, ids, 'don', int(sys.argv[3]), neighbours)
-        donor.waterSetUp(target)
-        donor.calcIdealZMat(target)
-        donor.writeZMat(target)
+    # Pull the geometry and atomIDs from the log file
+    geomFile = input[0].split()[0]
+    numAtoms = int(input[0].split()[1])
 
-        # Calculates and writes the z matrix or just coordinates
+    geometry = gg.geomPulllog(geomFile, numAtoms)
+    ids = gg.atomIdentify(geomFile, 7)
 
-    elif target == 'acc':
 
-        if len(neighbours) == 4:
-            for nB in range(4):
-                neighboursList = [neighbours[nB % 4], neighbours[(nB+1) % 4], neighbours[(nB+2) % 4]]
-                acceptor = waterPosition(geometry, ids, 'acc', int(sys.argv[3]), neighboursList)
-                acceptor.waterSetUp(target)
-                acceptor.writeCoords(target+str(nB))
+    # The remaining lines will contain the information for each donor/acceptor site
+# Read in raw data; then for each site set up geometry - do initially without lone pairs
+    siteIDs, siteList = [], []
+    # Read in raw data; then for each site set up geometry - do initially without lone pairs
+    for el in input[1:]:
+        siteIDs.append(el.split()[0])
+        if el.split()[3] == 'don':
+            siteList.append(DonorInt(el.split()[1:]))
+        elif el.split()[3] == 'acc':
+            siteList.append(AcceptorInt(el.split()[1:]))
 
-        else:
-            acceptor = waterPosition(geometry, ids, 'acc', int(sys.argv[3]), neighbours)
-            acceptor.waterSetUp(target)
-            acceptor.calcIdealZMat(target)
-            acceptor.writeZMat(target)
-            acceptor.writeCoords(target)
+    for site in siteList:
+        print(site.siteType)
+        site.localGeom(geometry)
 
-# Now should be able to edit final section as doesn't need to be seperate - does it need to even be a class?
+    waterSetUp(siteList)
 
+#
+#    if target == 'don':
+#
+#        donor = waterPosition(geometry, ids, 'don', int(sys.argv[3]), neighbours)
+#        donor.waterSetUp(target)
+#        donor.calcIdealZMat(target)
+#        donor.writeZMat(target)
+#
+#        # Calculates and writes the z matrix or just coordinates
+#
+#    elif target == 'acc':
+#
+#        if len(neighbours) == 4:
+#            for nB in range(4):
+#                neighboursList = [neighbours[nB % 4], neighbours[(nB+1) % 4], neighbours[(nB+2) % 4]]
+#                acceptor = waterPosition(geometry, ids, 'acc', int(sys.argv[3]), neighboursList)
+#                acceptor.waterSetUp(target)
+#                acceptor.writeCoords(target+str(nB))
+#
+#        else:
+#            acceptor = waterPosition(geometry, ids, 'acc', int(sys.argv[3]), neighbours)
+#            acceptor.waterSetUp(target)
+#            acceptor.calcIdealZMat(target)
+#            acceptor.writeZMat(target)
+#            acceptor.writeCoords(target)
+#
+## Now should be able to edit final section as doesn't need to be seperate - does it need to even be a class?
+#
