@@ -151,6 +151,11 @@ class waterPosition:
 
             self.dThree = self.HWOne + b2
 
+        print('Basis vectors: \n')
+        print(b2)
+        print(b3)
+        print(b1)
+
 
 # Add in ZMat calculation which has only the angle and dihedral left to optimise and fixes the others
     def calcIdealZMat(self, target):
@@ -226,8 +231,8 @@ class waterPosition:
             H1wOHx = gg.atomDihedral(self.HWOne, self.OW, self.targMol, self.dTwo)
             H2wOHx = gg.atomDihedral(self.HWTwo, self.OW, self.targMol, self.dTwo)
 
-            optVar = {'rDO': 2.00, 'OHx1': OHx1, 'OHx1x2': OHx1x2, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
-            zMatList = [OWzMat, HWOnezMat, HWTwozMat]
+            self.optVar = {'rDO': 2.00, 'OHx1': OHx1, 'OHx1x2': OHx1x2, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
+            self.zMatList = [OWzMat, HWOnezMat, HWTwozMat]
 
         elif target == 'acc':
 
@@ -249,14 +254,14 @@ class waterPosition:
             HAx1Init = gg.atomAngle(self.HWOne, self.targMol, self.dOne)
             HAx1x2Init = gg.atomDihedral(self.HWOne, self.targMol, self.dOne, self.dTwo)
             HOAxInit = gg.atomDihedral(self.HWTwo, self.OW, self.targMol, self.dTwo)
-            optVar = {'rAH': 2.00, 'HAx1': HAx1Init, 'HAx1x2': HAx1x2Init, 'HOAx': HOAxInit}
+            self.optVar = {'rAH': 2.00, 'HAx1': HAx1Init, 'HAx1x2': HAx1x2Init, 'HOAx': HOAxInit}
 
-            zMatList = [HWOnezMat, OWzMat, HWTwozMat]
+            self.zMatList = [HWOnezMat, OWzMat, HWTwozMat]
 
 
     def writeZMat(self, target):
-        with open('{}Int{}_idealZMat.com'.format(target, self.targMolID), 'w') as output:
-            print('%Chk={}Int{}_Zmat'.format(target, self.targMolID), file=output)
+        with open('master_{}Int{}zMatMax.com'.format(target, self.targMolID), 'w') as output:
+            print('%Chk=master_{}Int{}zMatMax'.format(target, self.targMolID), file=output)
             print('%NProcShared=12', file=output)
             print('%Mem=46000MB', file=output)
             print('#P HF/6-31G(d) Opt(Z-Matrix,MaxCycles=100) Geom(PrintInputOrient) SCF(Conver=9) Int(Grid=UltraFine)\n', file=output)
@@ -290,8 +295,8 @@ class waterPosition:
 
     def writeCoords(self, target):
 
-        with open('{}Int{}_coords.com'.format(target, self.targMolID), 'w') as output:
-            print('%Chk={}Int{}'.format(target, self.targMolID), file=output)
+        with open('master_{}{}Coords.com'.format(target, self.targMolID), 'w') as output:
+            print('%Chk=master_{}{}Coords'.format(target, self.targMolID), file=output)
             print('%NProcShared=24', file=output)
             print('%Mem=61000MB', file=output)
             print('#P HF/6-31G(d) Opt(MaxCycles=100) Geom(PrintInputOrient) SCF(Conver=9) Int(Grid=UltraFine)\n', file=output)
@@ -332,7 +337,7 @@ if __name__ == '__main__':
 
         donor = waterPosition(geometry, ids, 'don', int(sys.argv[3]), neighbours)
         donor.waterSetUp(target)
-        donor.calcIdealZMat(target)
+        donor.calcZMat(target)
         donor.writeZMat(target)
 
         # Calculates and writes the z matrix or just coordinates
@@ -349,7 +354,7 @@ if __name__ == '__main__':
         else:
             acceptor = waterPosition(geometry, ids, 'acc', int(sys.argv[3]), neighbours)
             acceptor.waterSetUp(target)
-            acceptor.calcIdealZMat(target)
+            acceptor.calcZMat(target)
             acceptor.writeZMat(target)
             acceptor.writeCoords(target)
 
