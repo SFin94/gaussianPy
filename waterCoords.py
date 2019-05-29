@@ -92,16 +92,14 @@ class InteractionSite:
         for nbInd in self.neighbourInd:
             self.neighbours.append(geometry[nbInd-1])
 
-    def bVectors(self, neighbourBonds):
+    def bVectors(self):
 
-        # Find centroid of the bonds and normalise
-        b1 = np.array([0., 0., 0.])
-        for nB in neighbourBonds:
-            b1 += nB
-            b1 /= len(neighbourBonds)
-            b1 /= np.linalg.norm(b1)
+        # Find centroid of the bonds and normalise for first basis vector
+        cBonds = self.neighbours - self.coords
+        b1 = np.sum(cBonds, axis=0)/len(self.neighbourInd)
+        b1 /= np.linalg.norm(b1)
 
-         # Find orthonormal basis with b1 using cross products (GS process alternative works but was unnecessary as orthogonal basis already created)
+        # Find orthonormal basis from b1 using cross products
         b2 = np.cross(self.coords, b1)
         b2 /= np.linalg.norm(b2)
         b3 = np.cross(b2, b1)
@@ -110,10 +108,18 @@ class InteractionSite:
         # Order of basis vectors is due to rotation later around y axis
         self.bBasis = np.array([b2, b3, b1])
 
+        # Test the triple product of the neighbour bond vectors
+        # If close to 0 then they lie in the same plane and switch b1 for the orthogonal b2 or b3
+        if len(self.neighbourInd) == 3:
+            if abs(tripleProduct(cBonds)) < 1e-03:
+                if abs(tripleProduct([cBonds[0], cBonds[1], site.bBasis[0]])) < 1e-03:
+                    site.bBasis[[1, 2]] = site.bBasis[[2, 1]]
+                else: site.bBasis[[0, 2]] = site.bBasis[[2, 0]]
 
-    def writeZMat(self, geometry, atomIDs):
-        with open('{}Int{}_idealZMat.com'.format(self.siteType, self.atomID), 'w') as output:
-            print('%Chk={}Int{}_idealZMat'.format(self.siteType, self.atomID), file=output)
+
+    def writeZMat(self, geometry, atomIDs, name='zMat'):
+        with open('{}Int{}_{}.com'.format(self.siteType, self.atomID, name), 'w') as output:
+            print('%Chk={}Int{}_{}'.format(self.siteType, self.atomID, name), file=output)
             print('%NProcShared=12', file=output)
             print('%Mem=46000MB', file=output)
             print('#P HF/6-31G(d) Opt(Z-Matrix,MaxCycles=100) Geom(PrintInputOrient) SCF(Conver=9) Int(Grid=UltraFine)\n', file=output)
@@ -142,10 +148,10 @@ class InteractionSite:
             print('\n\n', file=output)
 
 
-    def writeCoords(self, target):
+    def writeCoords(self, geometry, atomIDs, name='coords'):
 
-        with open('{}Int{}_coords.com'.format(self.siteType, self.atomID), 'w') as output:
-            print('%Chk={}Int{}_coords'.format(self.siteType, self.atomID), file=output)
+        with open('{}Int{}_{}.com'.format(self.siteType, self.atomID, name), 'w') as output:
+            print('%Chk={}Int{}_{}'.format(self.siteType, self.atomID, name), file=output)
             print('%NProcShared=24', file=output)
             print('%Mem=61000MB', file=output)
             print('#P HF/6-31G(d) Opt(MaxCycles=100) Geom(PrintInputOrient) SCF(Conver=9) Int(Grid=UltraFine)\n', file=output)
@@ -156,8 +162,8 @@ class InteractionSite:
                 print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format((atomIDs[atomInd]), el[:]), file=output)
             for dInd, dAtom in enumerate(self.dummyAtoms):
                 print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x' + str(dInd+1), dAtom[:]), file=output)
-            for waterAtom in [self.waterO, self.waterH1, self.waterH2]:
-                print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('Ow', waterAtom[:]), file=output)
+            for waterAtom in zip(['Ow', 'H1w', 'H2w'],[self.waterO, self.waterH1, self.waterH2]):
+                print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format(waterAtom[0], waterAtom[1][:]), file=output)
             print('\n\n', file=output)
 
 
@@ -177,8 +183,8 @@ class DonorInt(InteractionSite):
         # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
         bPx = self.bBasis.transpose()
             # Transform the rotation vectors for the water H's to the donor basis, scale, and add to the water O
-        self.waterH1 = np.matmul(bPx, rotOne)*self.bondOH + self.waterO
-        self.waterH2 = np.matmul(bPx, rotTwo)*self.bondOH + self.waterO
+        self.waterH1 = self.waterO - np.matmul(bPx, rotOne)*self.bondOH
+        self.waterH2 = self.waterO - np.matmul(bPx, rotTwo)*self.bondOH
 
     def dummyPosition(self):
 
@@ -194,12 +200,12 @@ class DonorInt(InteractionSite):
         # For ideal water O has one opt var and need to calculate angles and dihedrals
         OHx1 = gg.atomAngle(self.waterO, self.coords, self.dummyAtoms[0])
         OHx1x2 = gg.atomDihedral(self.waterO, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
-        OWzMat = {'Ow': numAtoms+3, self.atomID: 'rDO', 'x1': OHx1, 'x2': OHx1x2}
+        waterOzMat = {'Ow': numAtoms+3, self.atomID: 'rDO', 'x1': OHx1, 'x2': OHx1x2}
 
         # For water H geom; both r: bondOH; both ang: donor H and diheds: to same dummy and  left to opt
         Hw1A = (180 - 104.52/2.)
-        HWOnezMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H1wOHx'}
-        HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H2wOHx'}
+        waterH1zMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H1wOHx'}
+        waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H2wOHx'}
 
         # Calculate initial values for opt variables
         H1wOHx = gg.atomDihedral(self.waterH1, self.waterO, self.coords, self.dummyAtoms[1])
@@ -207,26 +213,26 @@ class DonorInt(InteractionSite):
         self.optVar = {'rDO': 2.00, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
 
         # Set list for writing the Z matrix section
-        self.zMatList = [OWzMat, HWOnezMat, HWTwozMat]
+        self.zMatList = [waterOzMat, waterH1zMat, waterH2zMat]
 
     def maxIntzMat(self):
 
         # Currently just copied and pasted in to place
         # For water O has three opt vars and calculates initial values
-        OWzMat = {'Ow': numAtoms+3, self.atomID: 'rDO', 'x1': 'OHx1', 'x2': 'OHx1x2'}
+        waterOzMat = {'Ow': numAtoms+3, self.atomID: 'rDO', 'x1': 'OHx1', 'x2': 'OHx1x2'}
         OHx1 = gg.atomAngle(self.waterO, self.coords, self.dummyAtoms[0])
         OHx1x2 = gg.atomDihedral(self.waterO, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
 
         # For water H geom; both r: bondOH; angle of first to H; second to water angleHOH; do dihedrals to first dummy
         Hw1A = (180 - 104.52/2.)
-        HWOnezMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.targMolID: Hw1A, 'x2': 'H1wOHx'}
-        HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.targMolID: Hw1A, 'x2': 'H2wOHx'}
+        waterH1zMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H1wOHx'}
+        waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H2wOHx'}
 
         H1wOHx = gg.atomDihedral(self.waterH1, self.waterO, self.coords, self.dummyAtoms[1])
         H2wOHx = gg.atomDihedral(self.waterH2, self.waterO, self.coords, self.dummyAtoms[1])
 
         self.optVar = {'rDO': 2.00, 'OHx1': OHx1, 'OHx1x2': OHx1x2, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
-        self.zMatList = [OWzMat, HWOnezMat, HWTwozMat]
+        self.zMatList = [waterOzMat, waterH1zMat, waterH2zMat]
 
 
 class AcceptorInt(InteractionSite):
@@ -258,30 +264,30 @@ class AcceptorInt(InteractionSite):
           # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (fixed)
         HAx1 = gg.atomAngle(self.waterH1, self.coords, self.dummyAtoms[0])
         HAx1x2 = gg.atomDihedral(self.waterH1, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
-        HWOnezMat = {'H1w': numAtoms+3, self.atomID: 'rAH', 'x1': HAx1, 'x2': HAx1x2}
+        waterH1zMat = {'H1w': numAtoms+3, self.atomID: 'rAH', 'x1': HAx1, 'x2': HAx1x2}
 
         # Second attempt trying to maintain linear interaction
         OAng = gg.atomAngle(self.waterO, self.waterH1, self.dummyAtoms[0])
         ODihed = gg.atomDihedral(self.waterO, self.waterH1, self.dummyAtoms[0], self.coords)
-        OWzMat = {'Ow': numAtoms+4, 'H1w': self.bondOH, 'x2': OAng, self.atomID: ODihed}
+        waterOzMat = {'Ow': numAtoms+4, 'H1w': self.bondOH, 'x2': OAng, self.atomID: ODihed}
 
         # Define 2nd H with r: OH bond distance to O; angle to Acceptor and dihed to dummy (left to opt)
         H2Ang = gg.atomAngle(self.waterH2, self.waterO, self.coords)
-        HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: H2Ang, 'x2': 'HOAx'}
+        waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: H2Ang, 'x2': 'HOAx'}
 
         # Calculate initial values for opt variables
         HOAx = gg.atomDihedral(self.waterH2, self.waterO, self.coords, self.dummyAtoms[1])
         self.optVar = {'rAH': 2.00, 'HOAx': HOAx}
 
         # Set list for writing the Z matrix section
-        self.zMatList = [HWOnezMat, OWzMat, HWTwozMat]
+        self.zMatList = [waterH1zMat, waterOzMat, waterH2zMat]
 
 
     def maxIntzMat(self):
 
         # Currently just copied and pasted in to place
         # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (opt)
-        HWOnezMat = {'H1w': numAtoms+3, self.atomID: 'rAH', 'x1': 'HAx1', 'x2': 'HAx1x2'}
+        waterH1zMat = {'H1w': numAtoms+3, self.atomID: 'rAH', 'x1': 'HAx1', 'x2': 'HAx1x2'}
 
         ang = gg.atomAngle(self.waterO, self.waterH1, self.dummyAtoms[2])
         dihed = gg.atomDihedral(self.waterO, self.waterH1, self.dummyAtoms[2], self.coords)
@@ -289,10 +295,10 @@ class AcceptorInt(InteractionSite):
         dist = gg.atomDist(self.waterO, self.dummyAtoms[2])
         ang = gg.atomAngle(self.waterO, self.dummyAtoms[2], self.waterH1)
         dihed = gg.atomDihedral(self.waterO, self.dummyAtoms[2], self.waterH1, self.coords)
-        OWzMat = {'Ow': numAtoms+4, 'x3': dist, 'H1w': ang, self.atomID: dihed}
+        waterOzMat = {'Ow': numAtoms+4, 'x3': dist, 'H1w': ang, self.atomID: dihed}
 
         ang = gg.atomAngle(self.waterH2, self.waterO, self.coords)
-        HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: ang, 'x2': 'HOAx'}
+        waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: ang, 'x2': 'HOAx'}
 
         # Start value for one dihedral seems to be out so calculate?
         HAx1Init = gg.atomAngle(self.waterH1, self.coords, self.dummyAtoms[0])
@@ -300,7 +306,7 @@ class AcceptorInt(InteractionSite):
         HOAxInit = gg.atomDihedral(self.waterH2, self.waterO, self.coords, self.dummyAtoms[1])
         self.optVar = {'rAH': 2.00, 'HAx1': HAx1Init, 'HAx1x2': HAx1x2Init, 'HOAx': HOAxInit}
 
-        self.zMatList = [HWOnezMat, OWzMat, HWTwozMat]
+        self.zMatList = [waterH1zMat, waterOzMat, waterH2zMat]
 
 
 
@@ -320,7 +326,7 @@ if __name__ == '__main__':
     numAtoms = int(input[0].split()[1])
 
     geometry = gg.geomPulllog(geomFile, numAtoms)
-    ids = gg.atomIdentify(geomFile, 7)
+    ids = gg.atomIdentify(geomFile, numAtoms)
 
 
     # The remaining lines will contain the information for each donor/acceptor site
@@ -336,29 +342,13 @@ if __name__ == '__main__':
 
     for site in siteList:
         site.localGeom(geometry)
-
-            # Calculate the neighbouring bonds between neighbouring positons
-        cBonds = []
-        for nB in site.neighbours:
-            cInitial = nB - site.coords
-            cBonds.append(cInitial)
-
-        # Set the basis vectors from the site
-        site.bVectors(cBonds)
-
-        # Test the triple product of the neighbour bond vectors
-        # If close to 0 then they lie in the same plane and switch b1 for the orthogonal b2 or b3
-        if len(cBonds) == 3:
-            if tripleProduct(cBonds) < 1e-03:
-                if abs(tripleProduct([cBonds[0], cBonds[1], site.bBasis[0]])) < 1e-03:
-                    site.bBasis[[1, 2]] = site.bBasis[[2, 1]]
-                else: site.bBasis[[0, 2]] = site.bBasis[[2, 0]]
-
-        print(site.bBasis)
+        site.bVectors()
         site.waterPosition()
-        print(site.waterO)
         site.dummyPosition()
-        site.idealzMat()
-        site.writeZMat(geometry, ids)
 
-        print(site.zMatList)
+        site.idealzMat()
+        site.writeZMat(geometry, ids, name='idealzMat')
+        site.writeCoords(geometry, ids, name='idealCoords')
+        site.maxIntzMat()
+        site.writeZMat(geometry, ids, name='maxIntzMat')
+        site.writeCoords(geometry, ids, name='maxIntCoords')
