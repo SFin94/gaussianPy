@@ -123,12 +123,12 @@ class InteractionSite:
             for atomInd, el in enumerate(geometry):
                 print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format((atomIDs[atomInd])+str(atomInd+1), el[:]), file=output)
             # Print dummy atom coordinates
-            for dAtom in self.dummyAtoms:
-                print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x1', dAtom[:]), file=output)
+            for dInd, dAtom in enumerate(self.dummyAtoms):
+                print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x' + str(dInd+1), dAtom[:]), file=output)
             # Process z matrix into string and print for water position
             for waterAtom in self.zMatList:
-                zMatInput = '{:<4}'.format(list(atom.keys())[0])
-                for entry in list(atom.items())[1:]:
+                zMatInput = '{:<4}'.format(list(waterAtom.keys())[0])
+                for entry in list(waterAtom.items())[1:]:
                     if isinstance(entry[1], str):
                         zMatInput += '{:>4}{: >8}'.format(entry[0], entry[1])
                     else:
@@ -154,9 +154,9 @@ class InteractionSite:
             # Print original molecular geometry
             for atomInd, el in enumerate(geometry):
                 print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format((atomIDs[atomInd]), el[:]), file=output)
-            for dAtoms in self.dummyAtoms:
-                print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x1', dAtom[:]), file=output)
-            for waterAtom in [self.OW, self.HWOne, self.HWTwo]:
+            for dInd, dAtom in enumerate(self.dummyAtoms):
+                print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x' + str(dInd+1), dAtom[:]), file=output)
+            for waterAtom in [self.waterO, self.waterH1, self.waterH2]:
                 print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('Ow', waterAtom[:]), file=output)
             print('\n\n', file=output)
 
@@ -166,7 +166,7 @@ class DonorInt(InteractionSite):
     def waterPosition(self):
 
         # Position the oxygen off the donor H
-        self.OW = self.coords - self.bBasis[2]*2
+        self.waterO = self.coords - self.bBasis[2]*2
 
         angles = [-(np.pi-self.angleHOH)/2, -(np.pi+self.angleHOH)/2]
 
@@ -177,8 +177,8 @@ class DonorInt(InteractionSite):
         # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
         bPx = self.bBasis.transpose()
             # Transform the rotation vectors for the water H's to the donor basis, scale, and add to the water O
-        self.HWOne = np.matmul(bPx, rotOne)*self.bondOH + self.OW
-        self.HWTwo = np.matmul(bPx, rotTwo)*self.bondOH + self.OW
+        self.waterH1 = np.matmul(bPx, rotOne)*self.bondOH + self.waterO
+        self.waterH2 = np.matmul(bPx, rotTwo)*self.bondOH + self.waterO
 
     def dummyPosition(self):
 
@@ -192,8 +192,8 @@ class DonorInt(InteractionSite):
 
         # Currently just copied and pasted in to place
         # For ideal water O has one opt var and need to calculate angles and dihedrals
-        OHx1 = gg.atomAngle(self.OW, self.coords, self.dummyAtoms[0])
-        OHx1x2 = gg.atomDihedral(self.OW, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
+        OHx1 = gg.atomAngle(self.waterO, self.coords, self.dummyAtoms[0])
+        OHx1x2 = gg.atomDihedral(self.waterO, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
         OWzMat = {'Ow': numAtoms+3, self.atomID: 'rDO', 'x1': OHx1, 'x2': OHx1x2}
 
         # For water H geom; both r: bondOH; both ang: donor H and diheds: to same dummy and  left to opt
@@ -202,8 +202,8 @@ class DonorInt(InteractionSite):
         HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H2wOHx'}
 
         # Calculate initial values for opt variables
-        H1wOHx = gg.atomDihedral(self.HWOne, self.OW, self.coords, self.dummyAtoms[1])
-        H2wOHx = gg.atomDihedral(self.HWTwo, self.OW, self.coords, self.dummyAtoms[1])
+        H1wOHx = gg.atomDihedral(self.waterH1, self.waterO, self.coords, self.dummyAtoms[1])
+        H2wOHx = gg.atomDihedral(self.waterH2, self.waterO, self.coords, self.dummyAtoms[1])
         self.optVar = {'rDO': 2.00, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
 
         # Set list for writing the Z matrix section
@@ -214,16 +214,16 @@ class DonorInt(InteractionSite):
         # Currently just copied and pasted in to place
         # For water O has three opt vars and calculates initial values
         OWzMat = {'Ow': numAtoms+3, self.atomID: 'rDO', 'x1': 'OHx1', 'x2': 'OHx1x2'}
-        OHx1 = gg.atomAngle(self.OW, self.coords, self.dummyAtoms[0])
-        OHx1x2 = gg.atomDihedral(self.OW, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
+        OHx1 = gg.atomAngle(self.waterO, self.coords, self.dummyAtoms[0])
+        OHx1x2 = gg.atomDihedral(self.waterO, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
 
         # For water H geom; both r: bondOH; angle of first to H; second to water angleHOH; do dihedrals to first dummy
         Hw1A = (180 - 104.52/2.)
         HWOnezMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.targMolID: Hw1A, 'x2': 'H1wOHx'}
         HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.targMolID: Hw1A, 'x2': 'H2wOHx'}
 
-        H1wOHx = gg.atomDihedral(self.HWOne, self.OW, self.coords, self.dummyAtoms[1])
-        H2wOHx = gg.atomDihedral(self.HWTwo, self.OW, self.coords, self.dummyAtoms[1])
+        H1wOHx = gg.atomDihedral(self.waterH1, self.waterO, self.coords, self.dummyAtoms[1])
+        H2wOHx = gg.atomDihedral(self.waterH2, self.waterO, self.coords, self.dummyAtoms[1])
 
         self.optVar = {'rDO': 2.00, 'OHx1': OHx1, 'OHx1x2': OHx1x2, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
         self.zMatList = [OWzMat, HWOnezMat, HWTwozMat]
@@ -233,44 +233,44 @@ class AcceptorInt(InteractionSite):
 
     def waterPosition(self):
 
-        self.HWOne = self.coords - self.bBasis[2]*2
+        self.waterH1 = self.coords - self.bBasis[2]*2
         # Position O bond distance away from the H
-        self.OW = self.HWOne - self.bBasis[2]*self.bondOH
+        self.waterO = self.waterH1 - self.bBasis[2]*self.bondOH
 
         # For second OH bond the angle will be angleHOH - 90
         rot = rotationY(-(self.angleHOH - 0.5*np.pi), np.array([1., 0., 0.]))
         # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
         bPx = self.bBasis.transpose()
         # Transform the rotation vectors for the second water H to the donor basis, scale, and add to the water O
-        self.HWTwo = self.OW - np.matmul(bPx, rot)*self.bondOH
+        self.waterH2 = self.waterO - np.matmul(bPx, rot)*self.bondOH
 
     def dummyPosition(self):
 
         # Define dummy atoms for zmatrix definition
         dOne = self.coords + self.bBasis[0]
         dTwo = self.coords + self.bBasis[1]
-        dThree = self.HWOne + self.bBasis[0]
+        dThree = self.waterH1 + self.bBasis[0]
         self.dummyAtoms = [dOne, dTwo, dThree]
 
     def idealzMat(self):
 
         # Currently just copied and pasted in to place
           # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (fixed)
-        HAx1 = gg.atomAngle(self.HWOne, self.coords, self.dummyAtoms[0])
-        HAx1x2 = gg.atomDihedral(self.HWOne, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
+        HAx1 = gg.atomAngle(self.waterH1, self.coords, self.dummyAtoms[0])
+        HAx1x2 = gg.atomDihedral(self.waterH1, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
         HWOnezMat = {'H1w': numAtoms+3, self.atomID: 'rAH', 'x1': HAx1, 'x2': HAx1x2}
 
         # Second attempt trying to maintain linear interaction
-        OAng = gg.atomAngle(self.OW, self.HWOne, self.dummyAtoms[0])
-        ODihed = gg.atomDihedral(self.OW, self.HWOne, self.dummyAtoms[0], self.coords)
+        OAng = gg.atomAngle(self.waterO, self.waterH1, self.dummyAtoms[0])
+        ODihed = gg.atomDihedral(self.waterO, self.waterH1, self.dummyAtoms[0], self.coords)
         OWzMat = {'Ow': numAtoms+4, 'H1w': self.bondOH, 'x2': OAng, self.atomID: ODihed}
 
         # Define 2nd H with r: OH bond distance to O; angle to Acceptor and dihed to dummy (left to opt)
-        H2Ang = gg.atomAngle(self.HWTwo, self.OW, self.coords)
+        H2Ang = gg.atomAngle(self.waterH2, self.waterO, self.coords)
         HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: H2Ang, 'x2': 'HOAx'}
 
         # Calculate initial values for opt variables
-        HOAx = gg.atomDihedral(self.HWTwo, self.OW, self.coords, self.dummyAtoms[1])
+        HOAx = gg.atomDihedral(self.waterH2, self.waterO, self.coords, self.dummyAtoms[1])
         self.optVar = {'rAH': 2.00, 'HOAx': HOAx}
 
         # Set list for writing the Z matrix section
@@ -283,21 +283,21 @@ class AcceptorInt(InteractionSite):
         # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (opt)
         HWOnezMat = {'H1w': numAtoms+3, self.atomID: 'rAH', 'x1': 'HAx1', 'x2': 'HAx1x2'}
 
-        ang = gg.atomAngle(self.OW, self.HWOne, self.dummyAtoms[2])
-        dihed = gg.atomDihedral(self.OW, self.HWOne, self.dummyAtoms[2], self.coords)
+        ang = gg.atomAngle(self.waterO, self.waterH1, self.dummyAtoms[2])
+        dihed = gg.atomDihedral(self.waterO, self.waterH1, self.dummyAtoms[2], self.coords)
 
-        dist = gg.atomDist(self.OW, self.dummyAtoms[2])
-        ang = gg.atomAngle(self.OW, self.dummyAtoms[2], self.HWOne)
-        dihed = gg.atomDihedral(self.OW, self.dummyAtoms[2], self.HWOne, self.coords)
+        dist = gg.atomDist(self.waterO, self.dummyAtoms[2])
+        ang = gg.atomAngle(self.waterO, self.dummyAtoms[2], self.waterH1)
+        dihed = gg.atomDihedral(self.waterO, self.dummyAtoms[2], self.waterH1, self.coords)
         OWzMat = {'Ow': numAtoms+4, 'x3': dist, 'H1w': ang, self.atomID: dihed}
 
-        ang = gg.atomAngle(self.HWTwo, self.OW, self.coords)
+        ang = gg.atomAngle(self.waterH2, self.waterO, self.coords)
         HWTwozMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: ang, 'x2': 'HOAx'}
 
         # Start value for one dihedral seems to be out so calculate?
-        HAx1Init = gg.atomAngle(self.HWOne, self.coords, self.dummyAtoms[0])
-        HAx1x2Init = gg.atomDihedral(self.HWOne, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
-        HOAxInit = gg.atomDihedral(self.HWTwo, self.OW, self.coords, self.dummyAtoms[1])
+        HAx1Init = gg.atomAngle(self.waterH1, self.coords, self.dummyAtoms[0])
+        HAx1x2Init = gg.atomDihedral(self.waterH1, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
+        HOAxInit = gg.atomDihedral(self.waterH2, self.waterO, self.coords, self.dummyAtoms[1])
         self.optVar = {'rAH': 2.00, 'HAx1': HAx1Init, 'HAx1x2': HAx1x2Init, 'HOAx': HOAxInit}
 
         self.zMatList = [HWOnezMat, OWzMat, HWTwozMat]
@@ -350,13 +350,15 @@ if __name__ == '__main__':
         # If close to 0 then they lie in the same plane and switch b1 for the orthogonal b2 or b3
         if len(cBonds) == 3:
             if tripleProduct(cBonds) < 1e-03:
-                test = []
                 if abs(tripleProduct([cBonds[0], cBonds[1], site.bBasis[0]])) < 1e-03:
                     site.bBasis[[1, 2]] = site.bBasis[[2, 1]]
                 else: site.bBasis[[0, 2]] = site.bBasis[[2, 0]]
 
+        print(site.bBasis)
         site.waterPosition()
+        print(site.waterO)
         site.dummyPosition()
         site.idealzMat()
+        site.writeZMat(geometry, ids)
 
         print(site.zMatList)
