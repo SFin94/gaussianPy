@@ -55,6 +55,26 @@ def rotationY(feta, inVec, bOne = np.array([1., 0., 0.]), bTwo = np.array([0., 1
     return(outVec)
 
 
+def totalRot(fetaX, fetaY, fetaZ, inVec):
+
+    '''Function which applies a rotation around the y axis (in the standard basis) by an input angle (feta)
+
+        Parameters:
+        feta: float - angle the vector is to be rotated around (radians)
+        inVec: numpy array (dim: 1x3) - the vector to be rotated
+        Optional parameters:
+        bOne, bTwo, bThree: numpy arrays (dim: 1x3) - Standard basis or alternative basis if set (not sure matrix is then applicable though?)
+        '''
+
+    # Set up three arrays: these are the rows of the transformation matrix
+    tX = np.array([np.cos(fetaZ)*np.cos(fetaY), np.cos(fetaZ)*np.sin(fetaY)*np.sin(fetaX) - np.sin(fetaZ)*np.cos(fetaX), np.cos(fetaZ)*np.sin(fetaY)*np.cos(fetaX) + np.sin(fetaZ)*np.sin(fetaX)])
+    tY = np.array([np.sin(fetaZ)*np.cos(fetaY), np.sin(fetaZ)*np.sin(fetaY)*np.sin(fetaX) + np.cos(fetaZ)*np.cos(fetaX), np.sin(fetaZ)*np.sin(fetaY)*np.cos(fetaX) - np.cos(fetaZ)*np.sin(fetaX)])
+    tZ = np.array([-np.sin(fetaY), np.cos(fetaY)*np.sin(fetaX), np.cos(fetaY)*np.cos(fetaX)])
+
+    outVec = np.array([np.dot(tX, inVec), np.dot(tY, inVec), np.dot(tZ, inVec)])
+
+    return(outVec)
+
 
 class InteractionSite:
 
@@ -128,7 +148,7 @@ class InteractionSite:
                 self.bBasis = np.array([b1, b3, b2])
             return(True)
 
-        # Test which of b3/b2 are orthogonal to the plane of the bonds to define x and y (set x as orthogonal)
+        # Test which of b3/b2 are orthogonal to the plane of the bonds to define x and y (set y as orthogonal)
         elif (len(self.neighbourInd) == 2) and (abs(tripleProduct([self.neighbourBonds[0], self.neighbourBonds[1], b3])) < tol):
             self.bBasis = np.array([b3, b2, b1])
 
@@ -204,13 +224,14 @@ class DonorInt(InteractionSite):
 
         angles = [-(np.pi-self.angleHOH)/2, -(np.pi+self.angleHOH)/2]
 
-        # Rotate standard basis by desired angles around the y axis
-        rotOne = rotationY(angles[0], np.array([1., 0., 0.]))
-        rotTwo = rotationY(angles[1], np.array([1., 0., 0.]))
-
         # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
         bPx = self.bBasis.transpose()
-            # Transform the rotation vectors for the water H's to the donor basis, scale, and add to the water O
+
+        # Rotate standard basis by desired angles around the y axis
+        rotOne = totalRot(0, angles[0], 0, np.array([1., 0., 0.]))
+        rotTwo = totalRot(0, angles[1], 0, np.array([1., 0., 0.]))
+
+        # Transform the rotation vectors for the water H's to the donor basis, scale, and add to the water O
         self.waterH1 = self.waterO - flip*np.matmul(bPx, rotOne)*self.bondOH
         self.waterH2 = self.waterO - flip*np.matmul(bPx, rotTwo)*self.bondOH
 
@@ -378,14 +399,7 @@ if __name__ == '__main__':
             siteList.append(AcceptorInt(el.split()))
 
     for site in siteList:
-        print(site.lonePairs)
-
-#    if site.lonePairs == 2:
-#        site.rotateGeom(np.radians(60))
-
-    for site in siteList:
         planar = site.localGeom(geometry)
-        print(planar)
         if planar == True:
             # Could be smarter way to set up the inverse
             site.waterPosition(flip=-1)
@@ -393,7 +407,9 @@ if __name__ == '__main__':
             writeRoutine(fileID='_reverse')
         site.waterPosition()
         site.dummyPosition()
-        print(site.bBasis)
-        #writeRoutine()
 
+    # Test for lone pairs - if one then would be the same
+#    if site.lonePairs == 2:
+#        site.rotateGeom(np.radians(60))
 
+        writeRoutine(fileID='_fullRot')
