@@ -111,27 +111,26 @@ class InteractionSite:
         b3 = np.cross(b2, b1)
         b3 /= np.linalg.norm(b3)
 
-        # Order of basis vectors is due to rotation later around y axis
-        self.bBasis = np.array([b2, b3, b1])
-
         # Test the triple product of the neighbour bond vectors
         # If close to 0 then they lie in the same plane and switch b1 for the orthogonal b2 or b3
         tol = 1e-03
-        if len(self.neighbourInd) == 3:
-            if abs(tripleProduct(self.neighbourBonds)) < tol:
-                if abs(tripleProduct([self.neighbourBonds[0], self.neighbourBonds[1], site.bBasis[0]])) < tol:
-                    site.bBasis[[1, 2]] = site.bBasis[[2, 1]]
-                else: site.bBasis[[0, 2]] = site.bBasis[[2, 0]]
+        if (len(self.neighbourInd) == 3) and (abs(tripleProduct(self.neighbourBonds))) < tol:
+                if abs(tripleProduct([self.neighbourBonds[0], self.neighbourBonds[1], b2])) < tol:
+                    self.bBasis = np.array([b2, b1, b3])
+                else:
+                    self.bBasis = np.array([b1, b3, b2])
                 return(True)
         # Test if two neighbours whether they are linear, if so switch basis vectors
-        elif len(self.neighbourInd) == 2:
-            if abs(np.dot(self.neighbourBonds[0], self.neighbourBonds[1])) < tol:
-                if abs(np.dot(self.neighbourBonds[0], site.bBasis[0])) < tol:
-                    site.bBasis[[1, 2]] = site.bBasis[[2, 1]]
-                else: site.bBasis[[0, 2]] = site.bBasis[[2, 0]]
+        elif (len(self.neighbourInd) == 2) and (abs(np.dot(self.neighbourBonds[0], self.neighbourBonds[1])) < tol):
+                if abs(np.dot(self.neighbourBonds[0], b2)) < tol:
+                    self.bBasis = np.array([b2, b1, b3])
+                else:
+                    self.bBasis = np.array([b1, b3, b2])
                 return(True)
 
-        else: return(False)
+        else:
+            self.bBasis = np.array([b2, b3, b1])
+            return(False)
 
 
     def rotateGeom(self, angle):
@@ -382,6 +381,7 @@ if __name__ == '__main__':
 
     for site in siteList:
         planar = site.localGeom(geometry)
+        print(planar)
         if planar == True:
             # Could be smarter way to set up the inverse
             site.waterPosition(flip=-1)
@@ -389,6 +389,7 @@ if __name__ == '__main__':
             writeRoutine(fileID='_reverse')
         site.waterPosition()
         site.dummyPosition()
-        writeRoutine()
+        print(site.bBasis)
+        #writeRoutine()
 
 
