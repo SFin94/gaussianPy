@@ -115,22 +115,26 @@ class InteractionSite:
         # If close to 0 then they lie in the same plane and switch b1 for the orthogonal b2 or b3
         tol = 1e-03
         if (len(self.neighbourInd) == 3) and (abs(tripleProduct(self.neighbourBonds))) < tol:
-                if abs(tripleProduct([self.neighbourBonds[0], self.neighbourBonds[1], b2])) < tol:
-                    self.bBasis = np.array([b2, b1, b3])
-                else:
-                    self.bBasis = np.array([b1, b3, b2])
-                return(True)
+            if abs(tripleProduct([self.neighbourBonds[0], self.neighbourBonds[1], b2])) < tol:
+                self.bBasis = np.array([b2, b1, b3])
+            else:
+                self.bBasis = np.array([b1, b3, b2])
+            return(True)
         # Test if two neighbours whether they are linear, if so switch basis vectors
         elif (len(self.neighbourInd) == 2) and (abs(np.dot(self.neighbourBonds[0], self.neighbourBonds[1])) < tol):
-                if abs(np.dot(self.neighbourBonds[0], b2)) < tol:
-                    self.bBasis = np.array([b2, b1, b3])
-                else:
-                    self.bBasis = np.array([b1, b3, b2])
-                return(True)
+            if abs(np.dot(self.neighbourBonds[0], b2)) < tol:
+                self.bBasis = np.array([b2, b1, b3])
+            else:
+                self.bBasis = np.array([b1, b3, b2])
+            return(True)
+
+        # Test which of b3/b2 are orthogonal to the plane of the bonds to define x and y (set x as orthogonal)
+        elif (len(self.neighbourInd) == 2) and (abs(tripleProduct([self.neighbourBonds[0], self.neighbourBonds[1], b3])) < tol):
+            self.bBasis = np.array([b3, b2, b1])
 
         else:
             self.bBasis = np.array([b2, b3, b1])
-            return(False)
+        return(False)
 
 
     def rotateGeom(self, angle):
