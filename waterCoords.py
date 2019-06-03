@@ -84,19 +84,25 @@ class InteractionSite:
         # Assign the type of site to be set up
         self.siteType = str(raw[3])
 
+        if len(raw) > 4:
+            self.lonePairs = int(raw[4])
+        else:
+            self.lonePairs = 0
+
 
     def localGeom(self, geometry):
 
+        # Set the coordinates of the covalently bonded neighbours
         self.coords = geometry[self.atomInd-1]
-        self.neighbours = []
+        neighbours = []
         for nbInd in self.neighbourInd:
-            self.neighbours.append(geometry[nbInd-1])
+            neighbours.append(geometry[nbInd-1])
 
-    def bVectors(self):
+        # Calculate bond vectors
+        self.neighbourBonds = neighbours - self.coords
 
         # Find centroid of the bonds and normalise for first basis vector
-        cBonds = self.neighbours - self.coords
-        b1 = np.sum(cBonds, axis=0)/len(self.neighbourInd)
+        b1 = np.sum(self.neighbourBonds, axis=0)/len(self.neighbourInd)
         b1 /= np.linalg.norm(b1)
 
         # Find orthonormal basis from b1 using cross products
@@ -110,11 +116,30 @@ class InteractionSite:
 
         # Test the triple product of the neighbour bond vectors
         # If close to 0 then they lie in the same plane and switch b1 for the orthogonal b2 or b3
+        tol = 1e-03
         if len(self.neighbourInd) == 3:
-            if abs(tripleProduct(cBonds)) < 1e-03:
-                if abs(tripleProduct([cBonds[0], cBonds[1], site.bBasis[0]])) < 1e-03:
+            if abs(tripleProduct(self.neighbourBonds)) < tol:
+                if abs(tripleProduct([self.neighbourBonds[0], self.neighbourBonds[1], site.bBasis[0]])) < tol:
                     site.bBasis[[1, 2]] = site.bBasis[[2, 1]]
                 else: site.bBasis[[0, 2]] = site.bBasis[[2, 0]]
+                return(True)
+        # Test if two neighbours whether they are linear, if so switch basis vectors
+        elif len(self.neighbourInd) == 2:
+            if abs(np.dot(self.neighbourBonds[0], self.neighbourBonds[1])) < tol:
+                if abs(np.dot(self.neighbourBonds[0], site.bBasis[0])) < tol:
+                    site.bBasis[[1, 2]] = site.bBasis[[2, 1]]
+                else: site.bBasis[[0, 2]] = site.bBasis[[2, 0]]
+                return(True)
+
+        else: return(False)
+
+
+    def rotateGeom(self, angle):
+
+        # Rotates basis by defined angle
+        bPx = self.bBasis.transpose()
+
+
 
 
     def writeZMat(self, geometry, atomIDs, name='zMat'):
@@ -169,10 +194,10 @@ class InteractionSite:
 
 class DonorInt(InteractionSite):
 
-    def waterPosition(self):
+    def waterPosition(self, flip=1):
 
         # Position the oxygen off the donor H
-        self.waterO = self.coords - self.bBasis[2]*2
+        self.waterO = self.coords - flip*self.bBasis[2]*2
 
         angles = [-(np.pi-self.angleHOH)/2, -(np.pi+self.angleHOH)/2]
 
@@ -183,8 +208,8 @@ class DonorInt(InteractionSite):
         # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
         bPx = self.bBasis.transpose()
             # Transform the rotation vectors for the water H's to the donor basis, scale, and add to the water O
-        self.waterH1 = self.waterO - np.matmul(bPx, rotOne)*self.bondOH
-        self.waterH2 = self.waterO - np.matmul(bPx, rotTwo)*self.bondOH
+        self.waterH1 = self.waterO - flip*np.matmul(bPx, rotOne)*self.bondOH
+        self.waterH2 = self.waterO - flip*np.matmul(bPx, rotTwo)*self.bondOH
 
     def dummyPosition(self):
 
@@ -237,18 +262,18 @@ class DonorInt(InteractionSite):
 
 class AcceptorInt(InteractionSite):
 
-    def waterPosition(self):
+    def waterPosition(self, flip=1):
 
-        self.waterH1 = self.coords - self.bBasis[2]*2
+        self.waterH1 = self.coords - flip*self.bBasis[2]*2
         # Position O bond distance away from the H
-        self.waterO = self.waterH1 - self.bBasis[2]*self.bondOH
+        self.waterO = self.waterH1 - flip*self.bBasis[2]*self.bondOH
 
         # For second OH bond the angle will be angleHOH - 90
         rot = rotationY(-(self.angleHOH - 0.5*np.pi), np.array([1., 0., 0.]))
         # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
         bPx = self.bBasis.transpose()
         # Transform the rotation vectors for the second water H to the donor basis, scale, and add to the water O
-        self.waterH2 = self.waterO - np.matmul(bPx, rot)*self.bondOH
+        self.waterH2 = self.waterO - flip*np.matmul(bPx, rot)*self.bondOH
 
     def dummyPosition(self):
 
@@ -309,6 +334,15 @@ class AcceptorInt(InteractionSite):
         self.zMatList = [waterH1zMat, waterOzMat, waterH2zMat]
 
 
+def writeRoutine(fileID=''):
+
+    site.idealzMat()
+    site.writeZMat(geometry, ids, name='idealzMat'+fileID)
+    site.writeCoords(geometry, ids, name='idealCoords'+fileID)
+    site.maxIntzMat()
+    site.writeZMat(geometry, ids, name='maxIntzMat'+fileID)
+    site.writeCoords(geometry, ids, name='maxIntCoords'+fileID)
+
 
 if __name__ == '__main__':
 
@@ -341,14 +375,20 @@ if __name__ == '__main__':
             siteList.append(AcceptorInt(el.split()))
 
     for site in siteList:
-        site.localGeom(geometry)
-        site.bVectors()
+        print(site.lonePairs)
+
+#    if site.lonePairs == 2:
+#        site.rotateGeom(np.radians(60))
+
+    for site in siteList:
+        planar = site.localGeom(geometry)
+        if planar == True:
+            # Could be smarter way to set up the inverse
+            site.waterPosition(flip=-1)
+            site.dummyPosition()
+            writeRoutine(fileID='_reverse')
         site.waterPosition()
         site.dummyPosition()
+        writeRoutine()
 
-        site.idealzMat()
-        site.writeZMat(geometry, ids, name='idealzMat')
-        site.writeCoords(geometry, ids, name='idealCoords')
-        site.maxIntzMat()
-        site.writeZMat(geometry, ids, name='maxIntzMat')
-        site.writeCoords(geometry, ids, name='maxIntCoords')
+
