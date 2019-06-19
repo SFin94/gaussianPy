@@ -31,39 +31,18 @@ def tripleProduct(nBonds):
     return(tripleProd)
 
 
-# Rotation around y axis
-def rotationY(feta, inVec, bOne = np.array([1., 0., 0.]), bTwo = np.array([0., 1., 0.]), bThree = np.array([0., 1., 0.])):
-
-    '''Function which applies a rotation around the y axis (in the standard basis) by an input angle (feta)
-
-        Parameters:
-        feta: float - angle the vector is to be rotated around (radians)
-        inVec: numpy array (dim: 1x3) - the vector to be rotated
-        Optional parameters:
-        bOne, bTwo, bThree: numpy arrays (dim: 1x3) - Standard basis or alternative basis if set (not sure matrix is then applicable though?)
-        '''
-
-    tX, tY, tZ = np.zeros(3), np.zeros(3), np.zeros(3)
-    outVec = np.zeros(3)
-    for bInd, bVec in enumerate([bOne, bTwo, bThree]):
-        tX[bInd] = bVec[0]*np.cos(feta) + bVec[2]*np.sin(feta)
-        tY[bInd] = bVec[1]
-        tZ[bInd] = bVec[2]*np.cos(feta) - bVec[0]*np.sin(feta)
-
-    outVec = np.array([np.dot(tX, inVec), np.dot(tY, inVec), np.dot(tZ, inVec)])
-
-    return(outVec)
-
-
 def totalRot(fetaX, fetaY, fetaZ, inVec):
 
-    '''Function which applies a rotation around the y axis (in the standard basis) by an input angle (feta)
+    '''Function which applies rotations around the x, y and z axis (in that order; in the standard basis) by different input angles (fetaX, fetaY, fetaZ; where the angle is the rotation is around the x, y, or z, respectively)
 
         Parameters:
-        feta: float - angle the vector is to be rotated around (radians)
-        inVec: numpy array (dim: 1x3) - the vector to be rotated
-        Optional parameters:
-        bOne, bTwo, bThree: numpy arrays (dim: 1x3) - Standard basis or alternative basis if set (not sure matrix is then applicable though?)
+         fetaX: float - angle (radians) of rotation around the x axis
+         fetaY: float - angle (radians) of rotation around the y axis
+         fetaZ: float - angle (radians) of rotation around the z axis
+         inVec: numpy array (dim: nx3) - the input vectors to be rotated
+
+        Return:
+         outVec: numpy array (dim: nx3) - the rotated vector for each input vector
         '''
 
     # Set up three arrays: these are the rows of the transformation matrix
@@ -71,8 +50,12 @@ def totalRot(fetaX, fetaY, fetaZ, inVec):
     tY = np.array([np.sin(fetaZ)*np.cos(fetaY), np.sin(fetaZ)*np.sin(fetaY)*np.sin(fetaX) + np.cos(fetaZ)*np.cos(fetaX), np.sin(fetaZ)*np.sin(fetaY)*np.cos(fetaX) - np.cos(fetaZ)*np.sin(fetaX)])
     tZ = np.array([-np.sin(fetaY), np.cos(fetaY)*np.sin(fetaX), np.cos(fetaY)*np.cos(fetaX)])
 
-    outVec = np.array([np.dot(tX, inVec), np.dot(tY, inVec), np.dot(tZ, inVec)])
-
+    if inVec.ndim == 1:
+        outVec = np.array([np.dot(tX, inVec), np.dot(tY, inVec), np.dot(tZ, inVec)])
+    else:
+        outVec = np.zeros(inVec.shape)
+        for ind in range(inVec.shape[0]):
+            outVec[ind] = [np.dot(tX, inVec[ind]), np.dot(tY, inVec[ind]), np.dot(tZ, inVec[ind])]
     return(outVec)
 
 
@@ -157,13 +140,27 @@ class InteractionSite:
         return(False)
 
 
-    def rotateGeom(self, angle):
+    def transformBasis(self, transformMat=None, fetaX=0, fetaY=0, fetaZ=0, rotate=False):
 
-        # Rotates basis by defined angle
-        bPx = self.bBasis.transpose()
+        ''' Function which rotates and updates the basis vectors by a linear transformation (w.r.t the standard basis) of rotations of angles fetaX, fetaY and fetaZ around the corresponding axes
 
+            Parameters:
+             fetaX: float - angle (radians) of rotation around the x axis
+             fetaY: float - angle (radians) of rotation around the y axis
+             fetaZ: float - angle (radians) of rotation around the z axis
+        '''
 
+        # Calculates linear transformation T w.r.t standard basis
+        standardBasis = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
+        if rotate == True:
+            transformMat = totalRot(fetaX, fetaY, fetaZ, standardBasis)
+
+        # Calculate inverse transformation matrix between bases which will be P transpose
+        totalTransform = np.matmul(self.bBasis.transpose(), transformMat)
+
+        # Apply transformation to basis vectors to update to new rotated basis
+        self.bBasis = np.matmul(totalTransform, self.bBasis)
 
     def writeZMat(self, geometry, atomIDs, name='zMat'):
         with open('{}Int{}_{}.com'.format(self.siteType, self.atomID, name), 'w') as output:
@@ -210,9 +207,20 @@ class InteractionSite:
                 print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format((atomIDs[atomInd]), el[:]), file=output)
             for dInd, dAtom in enumerate(self.dummyAtoms):
                 print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format('x' + str(dInd+1), dAtom[:]), file=output)
-            for waterAtom in zip(['Ow', 'H1w', 'H2w'],[self.waterO, self.waterH1, self.waterH2]):
+            for waterAtom in zip(['Ow', 'H1w', 'H2w'],[self.waterPos[1], self.waterPos[0], self.waterPos[2]]):
                 print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format(waterAtom[0], waterAtom[1][:]), file=output)
             print('\n\n', file=output)
+
+    def waterSetUp(self, geometry, atomIDs, fileID=''):
+
+        self.waterPosition()
+        self.dummyPosition()
+        self.idealzMat()
+        self.writeZMat(geometry, atomIDs, name='idealzMat'+fileID)
+        self.writeCoords(geometry, atomIDs, name='idealCoords'+fileID)
+        self.maxIntzMat()
+        self.writeZMat(geometry, atomIDs, name='maxIntzMat'+fileID)
+        self.writeCoords(geometry, atomIDs, name='maxIntCoords'+fileID)
 
 
 class DonorInt(InteractionSite):
@@ -220,7 +228,7 @@ class DonorInt(InteractionSite):
     def waterPosition(self, flip=1):
 
         # Position the oxygen off the donor H
-        self.waterO = self.coords - flip*self.bBasis[2]*2
+        self.waterPos[1] = self.coords - flip*self.bBasis[2]*2
 
         angles = [-(np.pi-self.angleHOH)/2, -(np.pi+self.angleHOH)/2]
 
@@ -232,8 +240,8 @@ class DonorInt(InteractionSite):
         rotTwo = totalRot(0, angles[1], 0, np.array([1., 0., 0.]))
 
         # Transform the rotation vectors for the water H's to the donor basis, scale, and add to the water O
-        self.waterH1 = self.waterO - flip*np.matmul(bPx, rotOne)*self.bondOH
-        self.waterH2 = self.waterO - flip*np.matmul(bPx, rotTwo)*self.bondOH
+        self.waterPos[0] = self.waterPos[1] - flip*np.matmul(bPx, rotOne)*self.bondOH
+        self.waterPos[2] = self.waterPos[1] - flip*np.matmul(bPx, rotTwo)*self.bondOH
 
     def dummyPosition(self):
 
@@ -247,8 +255,8 @@ class DonorInt(InteractionSite):
 
         # Currently just copied and pasted in to place
         # For ideal water O has one opt var and need to calculate angles and dihedrals
-        OHx1 = gg.atomAngle(self.waterO, self.coords, self.dummyAtoms[0])
-        OHx1x2 = gg.atomDihedral(self.waterO, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
+        OHx1 = gg.atomAngle(self.waterPos[1], self.coords, self.dummyAtoms[0])
+        OHx1x2 = gg.atomDihedral(self.waterPos[1], self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
         waterOzMat = {'Ow': numAtoms+3, self.atomID: 'rDO', 'x1': OHx1, 'x2': OHx1x2}
 
         # For water H geom; both r: bondOH; both ang: donor H and diheds: to same dummy and  left to opt
@@ -257,8 +265,8 @@ class DonorInt(InteractionSite):
         waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H2wOHx'}
 
         # Calculate initial values for opt variables
-        H1wOHx = gg.atomDihedral(self.waterH1, self.waterO, self.coords, self.dummyAtoms[1])
-        H2wOHx = gg.atomDihedral(self.waterH2, self.waterO, self.coords, self.dummyAtoms[1])
+        H1wOHx = gg.atomDihedral(self.waterPos[0], self.waterPos[1], self.coords, self.dummyAtoms[1])
+        H2wOHx = gg.atomDihedral(self.waterPos[2], self.waterPos[1], self.coords, self.dummyAtoms[1])
         self.optVar = {'rDO': 2.00, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
 
         # Set list for writing the Z matrix section
@@ -269,16 +277,16 @@ class DonorInt(InteractionSite):
         # Currently just copied and pasted in to place
         # For water O has three opt vars and calculates initial values
         waterOzMat = {'Ow': numAtoms+3, self.atomID: 'rDO', 'x1': 'OHx1', 'x2': 'OHx1x2'}
-        OHx1 = gg.atomAngle(self.waterO, self.coords, self.dummyAtoms[0])
-        OHx1x2 = gg.atomDihedral(self.waterO, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
+        OHx1 = gg.atomAngle(self.waterPos[1], self.coords, self.dummyAtoms[0])
+        OHx1x2 = gg.atomDihedral(self.waterPos[1], self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
 
         # For water H geom; both r: bondOH; angle of first to H; second to water angleHOH; do dihedrals to first dummy
         Hw1A = (180 - 104.52/2.)
         waterH1zMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H1wOHx'}
         waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H2wOHx'}
 
-        H1wOHx = gg.atomDihedral(self.waterH1, self.waterO, self.coords, self.dummyAtoms[1])
-        H2wOHx = gg.atomDihedral(self.waterH2, self.waterO, self.coords, self.dummyAtoms[1])
+        H1wOHx = gg.atomDihedral(self.waterPos[0], self.waterPos[1], self.coords, self.dummyAtoms[1])
+        H2wOHx = gg.atomDihedral(self.waterPos[2], self.waterPos[1], self.coords, self.dummyAtoms[1])
 
         self.optVar = {'rDO': 2.00, 'OHx1': OHx1, 'OHx1x2': OHx1x2, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
         self.zMatList = [waterOzMat, waterH1zMat, waterH2zMat]
@@ -286,46 +294,50 @@ class DonorInt(InteractionSite):
 
 class AcceptorInt(InteractionSite):
 
+    def __init__(self, raw):
+
+        InteractionSite.__init__(self, raw)
+
+        # Calculate water geometry w.r.t standard basis and origin
+        rot = totalRot(0, -(self.angleHOH - 0.5*np.pi), 0, np.array([1., 0., 0.]))
+        H1 = np.array([0, 0, 2])
+        O = H1 + np.array([0, 0, self.bondOH])
+        H2 = O + rot*self.bondOH
+        self.waterGeom = np.array([H1, O, H2])
+
+
     def waterPosition(self, flip=1):
-
-        self.waterH1 = self.coords - flip*self.bBasis[2]*2
-        # Position O bond distance away from the H
-        self.waterO = self.waterH1 - flip*self.bBasis[2]*self.bondOH
-
-        # For second OH bond the angle will be angleHOH - 90
-        rot = rotationY(-(self.angleHOH - 0.5*np.pi), np.array([1., 0., 0.]))
-        # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
-        bPx = self.bBasis.transpose()
-        # Transform the rotation vectors for the second water H to the donor basis, scale, and add to the water O
-        self.waterH2 = self.waterO - flip*np.matmul(bPx, rot)*self.bondOH
+        print('\n Method 2:')
+        self.waterPos = self.coords - np.matmul(self.waterGeom, self.bBasis)
+        print(self.waterPos)
 
     def dummyPosition(self):
 
         # Define dummy atoms for zmatrix definition
         dOne = self.coords + self.bBasis[0]
         dTwo = self.coords + self.bBasis[1]
-        dThree = self.waterH1 + self.bBasis[0]
+        dThree = self.waterPos[0] + self.bBasis[0]
         self.dummyAtoms = [dOne, dTwo, dThree]
 
     def idealzMat(self):
 
         # Currently just copied and pasted in to place
           # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (fixed)
-        HAx1 = gg.atomAngle(self.waterH1, self.coords, self.dummyAtoms[0])
-        HAx1x2 = gg.atomDihedral(self.waterH1, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
+        HAx1 = gg.atomAngle(self.waterPos[0], self.coords, self.dummyAtoms[0])
+        HAx1x2 = gg.atomDihedral(self.waterPos[0], self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
         waterH1zMat = {'H1w': numAtoms+3, self.atomID: 'rAH', 'x1': HAx1, 'x2': HAx1x2}
 
         # Second attempt trying to maintain linear interaction
-        OAng = gg.atomAngle(self.waterO, self.waterH1, self.dummyAtoms[0])
-        ODihed = gg.atomDihedral(self.waterO, self.waterH1, self.dummyAtoms[0], self.coords)
+        OAng = gg.atomAngle(self.waterPos[1], self.waterPos[0], self.dummyAtoms[0])
+        ODihed = gg.atomDihedral(self.waterPos[1], self.waterPos[0], self.dummyAtoms[0], self.coords)
         waterOzMat = {'Ow': numAtoms+4, 'H1w': self.bondOH, 'x2': OAng, self.atomID: ODihed}
 
         # Define 2nd H with r: OH bond distance to O; angle to Acceptor and dihed to dummy (left to opt)
-        H2Ang = gg.atomAngle(self.waterH2, self.waterO, self.coords)
+        H2Ang = gg.atomAngle(self.waterPos[2], self.waterPos[1], self.coords)
         waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: H2Ang, 'x2': 'HOAx'}
 
         # Calculate initial values for opt variables
-        HOAx = gg.atomDihedral(self.waterH2, self.waterO, self.coords, self.dummyAtoms[1])
+        HOAx = gg.atomDihedral(self.waterPos[2], self.waterPos[1], self.coords, self.dummyAtoms[1])
         self.optVar = {'rAH': 2.00, 'HOAx': HOAx}
 
         # Set list for writing the Z matrix section
@@ -338,34 +350,24 @@ class AcceptorInt(InteractionSite):
         # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (opt)
         waterH1zMat = {'H1w': numAtoms+3, self.atomID: 'rAH', 'x1': 'HAx1', 'x2': 'HAx1x2'}
 
-        ang = gg.atomAngle(self.waterO, self.waterH1, self.dummyAtoms[2])
-        dihed = gg.atomDihedral(self.waterO, self.waterH1, self.dummyAtoms[2], self.coords)
+        ang = gg.atomAngle(self.waterPos[1], self.waterPos[0], self.dummyAtoms[2])
+        dihed = gg.atomDihedral(self.waterPos[1], self.waterPos[0], self.dummyAtoms[2], self.coords)
 
-        dist = gg.atomDist(self.waterO, self.dummyAtoms[2])
-        ang = gg.atomAngle(self.waterO, self.dummyAtoms[2], self.waterH1)
-        dihed = gg.atomDihedral(self.waterO, self.dummyAtoms[2], self.waterH1, self.coords)
+        dist = gg.atomDist(self.waterPos[1], self.dummyAtoms[2])
+        ang = gg.atomAngle(self.waterPos[1], self.dummyAtoms[2], self.waterPos[0])
+        dihed = gg.atomDihedral(self.waterPos[1], self.dummyAtoms[2], self.waterPos[0], self.coords)
         waterOzMat = {'Ow': numAtoms+4, 'x3': dist, 'H1w': ang, self.atomID: dihed}
 
-        ang = gg.atomAngle(self.waterH2, self.waterO, self.coords)
+        ang = gg.atomAngle(self.waterPos[2], self.waterPos[1], self.coords)
         waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: ang, 'x2': 'HOAx'}
 
         # Start value for one dihedral seems to be out so calculate?
-        HAx1Init = gg.atomAngle(self.waterH1, self.coords, self.dummyAtoms[0])
-        HAx1x2Init = gg.atomDihedral(self.waterH1, self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
-        HOAxInit = gg.atomDihedral(self.waterH2, self.waterO, self.coords, self.dummyAtoms[1])
+        HAx1Init = gg.atomAngle(self.waterPos[0], self.coords, self.dummyAtoms[0])
+        HAx1x2Init = gg.atomDihedral(self.waterPos[0], self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
+        HOAxInit = gg.atomDihedral(self.waterPos[2], self.waterPos[1], self.coords, self.dummyAtoms[1])
         self.optVar = {'rAH': 2.00, 'HAx1': HAx1Init, 'HAx1x2': HAx1x2Init, 'HOAx': HOAxInit}
 
         self.zMatList = [waterH1zMat, waterOzMat, waterH2zMat]
-
-
-def writeRoutine(fileID=''):
-
-    site.idealzMat()
-    site.writeZMat(geometry, ids, name='idealzMat'+fileID)
-    site.writeCoords(geometry, ids, name='idealCoords'+fileID)
-    site.maxIntzMat()
-    site.writeZMat(geometry, ids, name='maxIntzMat'+fileID)
-    site.writeCoords(geometry, ids, name='maxIntCoords'+fileID)
 
 
 if __name__ == '__main__':
@@ -400,16 +402,22 @@ if __name__ == '__main__':
 
     for site in siteList:
         planar = site.localGeom(geometry)
+
+        # Set up first linear position for all
+        site.waterSetUp(geometry, ids)
+
+        # Test to see if linear or planar triple bonding plane, then set up reverse position
         if planar == True:
-            # Could be smarter way to set up the inverse
-            site.waterPosition(flip=-1)
-            site.dummyPosition()
-            writeRoutine(fileID='_reverse')
-        site.waterPosition()
-        site.dummyPosition()
+            flipZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, -1]])
+            site.transformBasis(transformMat = flipZ)
+            site.waterSetUp(geometry, ids, fileID='Reverse')
 
-    # Test for lone pairs - if one then would be the same
-#    if site.lonePairs == 2:
-#        site.rotateGeom(np.radians(60))
+        # Test to see if lone pair set up require
+        if site.lonePairs == 2:
+            site.transformBasis(fetaX = np.radians(330), rotate=True)
+            site.waterSetUp(geometry, ids, fileID='lp1')
+#            flipY = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
+#            site.transformBasis(transformMat = flipY)
+#            site.waterSetUp(geometry, ids, fileID='lp2')
 
-        writeRoutine(fileID='_fullRot')
+
