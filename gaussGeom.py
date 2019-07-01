@@ -8,7 +8,7 @@ import sys
 
 def geomPulllog(inputFile, numAtoms, optStep=1):
 
-    '''Function which extracts the optimised geometry of a molecule in the standard orientation from a Guassian .log file. NB: The standard orientation output is at the start of the next optimisation (?) cycle, before 'Optimization' would be met.
+    '''Function which extracts the optimised geometry of a molecule in the standard orientation from a Guassian .log file. NB: The standard orientation output is at the start of the next optimisation cycle, before 'Optimized' would be met.
 
     Parameters:
      inputFile: Str - name of the input log file
@@ -28,7 +28,7 @@ def geomPulllog(inputFile, numAtoms, optStep=1):
     with open(inputFile, 'r') as logFile:
         for el in logFile:
             # Standard orientation output precedes the corresponding optimisation section
-            if ('Standard orientation:' in el):
+            if 'Standard orientation:' in el:
                 # Skip the header section of the standard orientation block
                 [logFile.__next__() for x in range(0,4)]
                 # Read in the atomic coordinates, atom ID will be row index
@@ -43,6 +43,37 @@ def geomPulllog(inputFile, numAtoms, optStep=1):
             if (optCount == optStep):
                 return(molCoords)
     return(molCoords)
+
+
+
+def energyPull(inputFile, optStep=1):
+
+    '''Function which extracts the optimised energy of a molecule from a Guassian .log file. NB: The SCF Done output is at the start of the next optimisation cycle, before 'Optimized' would be met.
+
+        Parameters:
+        inputFile: Str - name of the input log file
+        optStep: Int - Optional argument, the optimised structure number wanted from the file (intermediate structure may be desired from a scan calculation. Default value = 1.
+
+        Returns:
+        molEnergy: float -  SCF Done energy
+        '''
+
+    # Number of 'optimized steps' encountered through file
+    optCount = 0
+    # Open and read input file
+    with open(inputFile, 'r') as logFile:
+        for el in logFile:
+            # SCF Done output precedes the correspdoning optimisation section
+            if 'SCF Done:' in el:
+                molEnergy = float(el.split('=')[1].split()[0])
+
+            # Increments optCount if 'Optimized' met, breaks loop if target opt step is reached
+            if 'Optimized Parameters' in el:
+                optCount += 1
+            if (optCount == optStep):
+                return(molEnergy)
+    return(molEnergy)
+
 
 def geomPullxyz(inputFile):
 
