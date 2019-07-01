@@ -162,6 +162,14 @@ class InteractionSite:
         # Apply transformation to basis vectors to update to new rotated basis
         self.bBasis = np.matmul(totalTransform, self.bBasis)
 
+    def setPositions(self, flip=1):
+
+        # Set water positions from the acceptor/donor atom
+        self.waterPos = self.coords - np.matmul(self.waterGeom, self.bBasis)
+
+        # Calculate the dummy atom positions (donor doesn't actually need d3)
+        self.dummyAtoms = self.dummySetUp()
+
     def writeZMat(self, geometry, atomIDs, name='zMat'):
         with open('{}Int{}_{}.com'.format(self.siteType, self.atomID, name), 'w') as output:
             print('%Chk={}Int{}_{}'.format(self.siteType, self.atomID, name), file=output)
@@ -211,45 +219,40 @@ class InteractionSite:
                 print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format(waterAtom[0], waterAtom[1][:]), file=output)
             print('\n\n', file=output)
 
-    def waterSetUp(self, geometry, atomIDs, fileID=''):
+    def writeGeom(self, geometry, atomIDs, fileID=''):
 
-        self.waterPosition()
-        self.dummyPosition()
-        self.idealzMat()
-        self.writeZMat(geometry, atomIDs, name='idealzMat'+fileID)
-        self.writeCoords(geometry, atomIDs, name='idealCoords'+fileID)
+        #self.idealzMat()
+        #self.writeZMat(geometry, atomIDs, name='idealzMat'+fileID)
+        #self.writeCoords(geometry, atomIDs, name='idealCoords'+fileID)
         self.maxIntzMat()
-        self.writeZMat(geometry, atomIDs, name='maxIntzMat'+fileID)
+        #self.writeZMat(geometry, atomIDs, name='maxIntzMat'+fileID)
         self.writeCoords(geometry, atomIDs, name='maxIntCoords'+fileID)
 
 
 class DonorInt(InteractionSite):
 
-    def waterPosition(self, flip=1):
+    def __init__(self, raw):
 
-        # Position the oxygen off the donor H
-        self.waterPos[1] = self.coords - flip*self.bBasis[2]*2
+        InteractionSite.__init__(self, raw)
 
+        # Calculate angles for rotation from basis to H positions and peform rotation for O-H bond vectors
         angles = [-(np.pi-self.angleHOH)/2, -(np.pi+self.angleHOH)/2]
-
-        # Construct transition matrix from standard basis to donor basis (inv is transpose). Order is matched to rotation done (would be rotating b2 around b3); making them b1 and b2 respectively
-        bPx = self.bBasis.transpose()
-
-        # Rotate standard basis by desired angles around the y axis
         rotOne = totalRot(0, angles[0], 0, np.array([1., 0., 0.]))
         rotTwo = totalRot(0, angles[1], 0, np.array([1., 0., 0.]))
 
-        # Transform the rotation vectors for the water H's to the donor basis, scale, and add to the water O
-        self.waterPos[0] = self.waterPos[1] - flip*np.matmul(bPx, rotOne)*self.bondOH
-        self.waterPos[2] = self.waterPos[1] - flip*np.matmul(bPx, rotTwo)*self.bondOH
+        # Only differ in negative/positive x coord so may be quicker to do one function call then calculate second
 
-    def dummyPosition(self):
+        # Set water geometry positions w.r.t standard basis and donor atom as origin
+        O = np.array([0, 0, 2])
+        H1 = O + rotOne*self.bondOH
+        H2 = O + rotTwo*self.bondOH
+        self.waterGeom = np.array([H1, O, H2])
 
-        # Define dummy atoms for angles from the H donor
+    def dummySetUp(self):
+
         dOne = self.coords + self.bBasis[0]
         dTwo = self.coords + self.bBasis[1]
-        self.dummyAtoms = [dOne, dTwo]
-
+        return([dOne, dTwo])
 
     def idealzMat(self):
 
@@ -298,26 +301,19 @@ class AcceptorInt(InteractionSite):
 
         InteractionSite.__init__(self, raw)
 
-        # Calculate water geometry w.r.t standard basis and origin
+        # Calculate water geometry w.r.t standard basis and origin as acceptor atom
         rot = totalRot(0, -(self.angleHOH - 0.5*np.pi), 0, np.array([1., 0., 0.]))
         H1 = np.array([0, 0, 2])
         O = H1 + np.array([0, 0, self.bondOH])
         H2 = O + rot*self.bondOH
         self.waterGeom = np.array([H1, O, H2])
 
+    def dummySetUp(self):
 
-    def waterPosition(self, flip=1):
-        print('\n Method 2:')
-        self.waterPos = self.coords - np.matmul(self.waterGeom, self.bBasis)
-        print(self.waterPos)
-
-    def dummyPosition(self):
-
-        # Define dummy atoms for zmatrix definition
         dOne = self.coords + self.bBasis[0]
         dTwo = self.coords + self.bBasis[1]
         dThree = self.waterPos[0] + self.bBasis[0]
-        self.dummyAtoms = [dOne, dTwo, dThree]
+        return([dOne, dTwo, dThree])
 
     def idealzMat(self):
 
@@ -403,9 +399,6 @@ if __name__ == '__main__':
     for site in siteList:
         planar = site.localGeom(geometry)
 
-        # Set up first linear position for all
-        site.waterSetUp(geometry, ids)
-
         # Test to see if linear or planar triple bonding plane, then set up reverse position
         if planar == True:
             flipZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, -1]])
@@ -415,7 +408,9 @@ if __name__ == '__main__':
         # Test to see if lone pair set up require
         if site.lonePairs == 2:
             site.transformBasis(fetaX = np.radians(330), rotate=True)
-            site.waterSetUp(geometry, ids, fileID='lp1')
+            #site.waterSetUp(geometry, ids, fileID='lp1')
+            site.transformBasis(fetaZ = np.radians(180), rotate=True)
+            #site.waterSetUp(geometry, ids, fileID='lp2')
 #            flipY = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
 #            site.transformBasis(transformMat = flipY)
 #            site.waterSetUp(geometry, ids, fileID='lp2')
