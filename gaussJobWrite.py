@@ -22,23 +22,6 @@ def parseOriginal(fileName, section):
             elif sectionCount == section:
                 input.append(el.strip())
     return(input)
-#try:
-#    with open(fileName + '.com', 'r') as inputFile:
-#            inputRaw = inputFile.read().splitlines()
-#    except IOError:
-#        print("Error opening .com file", sys.stderr)
-#
-#    # Tracks section breaks to identify input sections in file. Multiple blank lines should signify EOF only
-#    sections = []
-#    for linInd in range(len(inputRaw)-1):
-#        if inputRaw[linInd] == '':
-#            sections.append(linInd)
-#            if inputRaw[linInd + 1] == '':
-#                break
-#        if 'connectivity' in inputRaw[linInd]:
-#            skipConnectivity = True
-#    return(inputRaw, sections, skipConnectivity)
-
 
 usage = "usage: %(prog)s [fileName] [args]"
 parser = argparse.ArgumentParser(usage=usage)
@@ -105,8 +88,7 @@ for jT in args.jobType:
         nProc = 24
         memMB = 58000
     if jT.lower() == 'own':
-        jobType += input("Enter job inputs as they would appear in Gaussian.com file:\n")
-    print(jobType)
+        jobType += input("Enter job inputs as they would appear in Gaussian.com file:\n") + ' '
     jobTitle = jobTitle + ' ' + jT
 
 # Adds SCRF command and SMD for solvation in water if flag raised at input
@@ -133,7 +115,7 @@ elif args.geom[-4:] == '.log':
                 numAtoms = int(el.split()[1])
                 break
     ids = gg.atomIdentify(args.geom, numAtoms)
-    geometry = gg.geomPull(args.geom, numAtoms)
+    geometry = gg.geomPulllog(args.geom, numAtoms)
     for atom in range(numAtoms):
         moleculeGeom.append('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format(ids[atom], geometry[atom,:]))
 
