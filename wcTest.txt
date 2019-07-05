@@ -1,0 +1,5 @@
+tdazMP2Structure.log 7
+C1 1 2,3,7 acc
+N3 3 1,4 acc 1
+S7 7 1,5 acc 2
+H2 2 1 don
