@@ -31,6 +31,22 @@ def tripleProduct(nBonds):
     return(tripleProd)
 
 
+def axisRot(feta, rotAxis, inVec):
+
+    tX = np.array([np.cos(feta) + rotAxis[0]*rotAxis[0]*(1 - np.cos(feta)), rotAxis[0]*rotAxis[1]*(1 - np.cos(feta))-rotAxis[2]*np.sin(feta), rotAxis[0]*rotAxis[2]*(1 - np.cos(feta))+rotAxis[1]*np.sin(feta)])
+    tY = np.array([rotAxis[1]*rotAxis[0]*(1 - np.cos(feta))+rotAxis[2]*np.sin(feta), np.cos(feta) + rotAxis[1]*rotAxis[1]*(1 - np.cos(feta)), rotAxis[1]*rotAxis[2]*(1 - np.cos(feta))-rotAxis[0]*np.sin(feta)])
+    tZ = np.array([rotAxis[2]*rotAxis[0]*(1 - np.cos(feta))-rotAxis[1]*np.sin(feta), rotAxis[2]*rotAxis[1]*(1 - np.cos(feta))+rotAxis[0]*np.sin(feta), np.cos(feta) + rotAxis[2]*rotAxis[2]*(1 - np.cos(feta))])
+
+    if inVec.ndim == 1:
+        outVec = np.array([np.dot(tX, inVec), np.dot(tY, inVec), np.dot(tZ, inVec)])
+    else:
+        outVec = np.zeros(inVec.shape)
+        for ind in range(inVec.shape[0]):
+            outVec[ind] = [np.dot(tX, inVec[ind]), np.dot(tY, inVec[ind]), np.dot(tZ, inVec[ind])]
+    return(outVec)
+
+
+
 def totalRot(fetaX, fetaY, fetaZ, inVec):
 
     '''Function which applies rotations around the x, y and z axis (in that order; in the standard basis) by different input angles (fetaX, fetaY, fetaZ; where the angle is the rotation is around the x, y, or z, respectively)
@@ -125,6 +141,7 @@ class InteractionSite:
             return(True)
         # Test if two neighbours whether they are linear, if so switch basis vectors
         elif (len(self.neighbourInd) == 2) and (abs(np.dot(self.neighbourBonds[0], self.neighbourBonds[1])) < tol):
+            print('linear')
             if abs(np.dot(self.neighbourBonds[0], b2)) < tol:
                 self.bBasis = np.array([b2, b1, b3])
             else:
@@ -150,19 +167,19 @@ class InteractionSite:
              fetaZ: float - angle (radians) of rotation around the z axis
         '''
 
-        # Calculates linear transformation T w.r.t standard basis
+        # Calculates linear transformation T w.r.t standard basis (C)
         standardBasis = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
         if rotate == True:
             transformMat = totalRot(fetaX, fetaY, fetaZ, standardBasis)
 
-        # Calculate inverse transformation matrix between bases which will be P transpose
+        # Calculate transformation matrix w.r.t site basis (B) (using P transpose as transition matrix from C to B)
         totalTransform = np.matmul(self.bBasis.transpose(), transformMat)
 
         # Apply transformation to basis vectors to update to new rotated basis
         self.bBasis = np.matmul(totalTransform, self.bBasis)
 
-    def setPositions(self, flip=1):
+    def setPositions(self):
 
         # Set water positions from the acceptor/donor atom
         self.waterPos = self.coords - np.matmul(self.waterGeom, self.bBasis)
@@ -171,6 +188,15 @@ class InteractionSite:
         self.dummyAtoms = self.dummySetUp()
 
     def writeZMat(self, geometry, atomIDs, name='zMat'):
+
+        ''' Function which writes a gaussian input file with the constrained optimisation input in z matrix form
+
+            Inputs:
+            geometry: x, y, z coordinates of each atom in the molecule
+            atomIDs: List of atomIDs in the molecule
+            name: str - optional add on identifier for the input file (default: 'zMat')
+            '''
+
         with open('{}Int{}_{}.com'.format(self.siteType, self.atomID, name), 'w') as output:
             print('%Chk={}Int{}_{}'.format(self.siteType, self.atomID, name), file=output)
             print('%NProcShared=12', file=output)
@@ -203,6 +229,14 @@ class InteractionSite:
 
     def writeCoords(self, geometry, atomIDs, name='coords'):
 
+        ''' Function which writes a gaussian input file with just the cartesian coordinates of the molecule and water
+
+            Inputs:
+             geometry: x, y, z coordinates of each atom in the molecule
+             atomIDs: List of atomIDs in the molecule
+             name: str - optional add on identifier for the input file (default: 'zMat')
+        '''
+
         with open('{}Int{}_{}.com'.format(self.siteType, self.atomID, name), 'w') as output:
             print('%Chk={}Int{}_{}'.format(self.siteType, self.atomID, name), file=output)
             print('%NProcShared=24', file=output)
@@ -219,17 +253,19 @@ class InteractionSite:
                 print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format(waterAtom[0], waterAtom[1][:]), file=output)
             print('\n\n', file=output)
 
-    def writeGeom(self, geometry, atomIDs, fileID=''):
+    def zMatWriter(self, geometry, atomIDs, fileID=''):
 
-        #self.idealzMat()
-        #self.writeZMat(geometry, atomIDs, name='idealzMat'+fileID)
-        #self.writeCoords(geometry, atomIDs, name='idealCoords'+fileID)
-        self.maxIntzMat()
-        #self.writeZMat(geometry, atomIDs, name='maxIntzMat'+fileID)
-        self.writeCoords(geometry, atomIDs, name='maxIntCoords'+fileID)
+        self.idealzMat()
+        self.writeZMat(geometry, atomIDs, name='idealzMat' + fileID)
+        site.maxIntzMat()
+        self.writeZMat(geometry, atomIDs, name='maxIntzMat' + fileID)
 
 
 class DonorInt(InteractionSite):
+
+    '''Child class of Interaction Site
+        Sets variables and water position for a donor interaction
+    '''
 
     def __init__(self, raw):
 
@@ -297,6 +333,10 @@ class DonorInt(InteractionSite):
 
 class AcceptorInt(InteractionSite):
 
+    '''Child class of Interaction Site
+        Sets variables and water position for an acceptor interaction
+        '''
+
     def __init__(self, raw):
 
         InteractionSite.__init__(self, raw)
@@ -313,6 +353,9 @@ class AcceptorInt(InteractionSite):
         dOne = self.coords + self.bBasis[0]
         dTwo = self.coords + self.bBasis[1]
         dThree = self.waterPos[0] + self.bBasis[0]
+#        dOne = self.coords + np.array([1, 0, 0])
+#        dTwo = self.coords + np.array([0, 1, 0])
+#        dThree = self.coords + np.array([0, 0, 1])
         return([dOne, dTwo, dThree])
 
     def idealzMat(self):
@@ -398,21 +441,26 @@ if __name__ == '__main__':
 
     for site in siteList:
         planar = site.localGeom(geometry)
+        site.setPositions()
+#        site.writeCoords(geometry, ids, name='maxIntCoords'+ site.atomID)
+        site.zMatWriter(geometry, ids, fileID=site.atomID)
 
         # Test to see if linear or planar triple bonding plane, then set up reverse position
         if planar == True:
-            flipZ = np.array([[1, 0, 0], [0, 1, 0], [0, 0, -1]])
-            site.transformBasis(transformMat = flipZ)
-            site.waterSetUp(geometry, ids, fileID='Reverse')
+            site.bBasis = axisRot(np.radians(180), site.bBasis[0], site.bBasis)
+            site.setPositions()
+#            site.writeCoords(geometry, ids, name='maxIntCoords_inv'+ site.atomID)
+            site.zMatWriter(geometry, ids, fileID=site.atomID + '_inv')
 
         # Test to see if lone pair set up require
         if site.lonePairs == 2:
-            site.transformBasis(fetaX = np.radians(330), rotate=True)
-            #site.waterSetUp(geometry, ids, fileID='lp1')
-            site.transformBasis(fetaZ = np.radians(180), rotate=True)
-            #site.waterSetUp(geometry, ids, fileID='lp2')
-#            flipY = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
-#            site.transformBasis(transformMat = flipY)
-#            site.waterSetUp(geometry, ids, fileID='lp2')
 
+            site.bBasis = axisRot(np.radians(60), site.bBasis[0], site.bBasis)
+            site.setPositions()
+#            site.writeCoords(geometry, ids, name='maxIntCoords_lp1'+ site.atomID)
+            site.zMatWriter(geometry, ids, fileID=site.atomID + '_lp1')
+            site.bBasis = axisRot(np.radians(-120), site.bBasis[0], site.bBasis)
+            site.setPositions()
+#            site.writeCoords(geometry, ids, name='maxIntCoords_lp2'+ site.atomID)
+            site.zMatWriter(geometry, ids, fileID=site.atomID + '_lp2')
 
