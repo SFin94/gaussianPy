@@ -89,7 +89,7 @@ class InteractionSite:
     bondOH = 0.9572
     angleHOH = np.radians(104.52)
 
-    def __init__(self, raw, extraID=None):
+    def __init__(self, raw, extraID=''):
 
         # Set the id index of the target mol
         self.atomID = raw[0] + raw[1]
@@ -269,7 +269,7 @@ class DonorInt(InteractionSite):
         Sets variables and water position for a donor interaction
     '''
 
-    def __init__(self, raw, extraID=None):
+    def __init__(self, raw, extraID=''):
 
         InteractionSite.__init__(self, raw, extraID)
 
@@ -339,7 +339,7 @@ class AcceptorInt(InteractionSite):
         Sets variables and water position for an acceptor interaction
         '''
 
-    def __init__(self, raw, extraID=None):
+    def __init__(self, raw, extraID=''):
 
         InteractionSite.__init__(self, raw, extraID)
 
@@ -463,7 +463,7 @@ if __name__ == '__main__':
             site.zMatWriter(geometry, ids)
             site.bBasis = axisRot(np.radians(-120), site.bBasis[0], site.bBasis)
             site.setPositions()
-            site.fileID[-1] = '2'
+            site.fileID = site.fileID[:-1] + '2'
 #            site.writeCoords(geometry, ids, name='maxIntCoords_lp2'+ site.atomID)
             site.zMatWriter(geometry, ids)
 
