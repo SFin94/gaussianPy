@@ -78,7 +78,6 @@ def totalRot(fetaX, fetaY, fetaZ, inVec):
 class InteractionSite:
 
     ''' Class - creates object for each water position to be set up
->>>>>>> restructure
 
         Attributes:
             siteInd: int - molecular index of the donor/acceptor site
@@ -90,11 +89,12 @@ class InteractionSite:
     bondOH = 0.9572
     angleHOH = np.radians(104.52)
 
-    def __init__(self, raw):
+    def __init__(self, raw, extraID=None):
 
         # Set the id index of the target mol
-        self.atomID = raw[0]
+        self.atomID = raw[0] + raw[1]
         self.atomInd = int(raw[1])
+        self.fileID = extraID
 
         # Set the list of covalently bonded neighbours
         self.neighbourInd = []
@@ -189,7 +189,7 @@ class InteractionSite:
         self.dummyAtoms = self.dummySetUp()
 
 
-    def writeZMat(self, geometry, atomIDs, name='zMat'):
+    def writeZMat(self, geometry, atomIDs, fileName='zMat'):
 
         ''' Function which writes a gaussian input file with the constrained optimisation input in z matrix form
 
@@ -199,8 +199,8 @@ class InteractionSite:
             name: str - optional add on identifier for the input file (default: 'zMat')
             '''
 
-        with open('{}Int{}_{}.com'.format(self.siteType, self.atomID, name), 'w') as output:
-            print('%Chk={}Int{}_{}'.format(self.siteType, self.atomID, name), file=output)
+        with open('{}Int{}_{}.com'.format(self.siteType, self.atomID, fileName), 'w') as output:
+            print('%Chk={}Int{}_{}'.format(self.siteType, self.atomID, fileName), file=output)
             print('%NProcShared=12', file=output)
             print('%Mem=46000MB', file=output)
             print('#P HF/6-31G(d) Opt(Z-Matrix,MaxCycles=100) Geom(PrintInputOrient) SCF(Conver=9) Int(Grid=UltraFine)\n', file=output)
@@ -229,7 +229,7 @@ class InteractionSite:
             print('\n\n', file=output)
 
 
-    def writeCoords(self, geometry, atomIDs, name='coords'):
+    def writeCoords(self, geometry, atomIDs, fileName='coords'):
 
         ''' Function which writes a gaussian input file with just the cartesian coordinates of the molecule and water
 
@@ -239,8 +239,8 @@ class InteractionSite:
              name: str - optional add on identifier for the input file (default: 'zMat')
         '''
 
-        with open('{}Int{}_{}.com'.format(self.siteType, self.atomID, name), 'w') as output:
-            print('%Chk={}Int{}_{}'.format(self.siteType, self.atomID, name), file=output)
+        with open('{}Int{}_{}.com'.format(self.siteType, self.atomID, fileName), 'w') as output:
+            print('%Chk={}Int{}_{}'.format(self.siteType, self.atomID, fileName), file=output)
             print('%NProcShared=24', file=output)
             print('%Mem=61000MB', file=output)
             print('#P HF/6-31G(d) Opt(MaxCycles=100) Geom(PrintInputOrient) SCF(Conver=9) Int(Grid=UltraFine)\n', file=output)
@@ -255,12 +255,12 @@ class InteractionSite:
                 print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format(waterAtom[0], waterAtom[1][:]), file=output)
             print('\n\n', file=output)
 
-    def zMatWriter(self, geometry, atomIDs, fileID=''):
+    def zMatWriter(self, geometry, atomIDs):
 
         self.idealzMat()
-        self.writeZMat(geometry, atomIDs, name='idealzMat' + fileID)
+        self.writeZMat(geometry, atomIDs, fileName='idealzMat' + self.fileID)
         site.maxIntzMat()
-        self.writeZMat(geometry, atomIDs, name='maxIntzMat' + fileID)
+        self.writeZMat(geometry, atomIDs, fileName='maxIntzMat' + self.fileID)
 
 
 class DonorInt(InteractionSite):
@@ -269,9 +269,9 @@ class DonorInt(InteractionSite):
         Sets variables and water position for a donor interaction
     '''
 
-    def __init__(self, raw):
+    def __init__(self, raw, extraID=None):
 
-        InteractionSite.__init__(self, raw)
+        InteractionSite.__init__(self, raw, extraID)
 
         # Calculate angles for rotation from basis to H positions and peform rotation for O-H bond vectors
         angles = [-(np.pi-self.angleHOH)/2, -(np.pi+self.angleHOH)/2]
@@ -339,9 +339,9 @@ class AcceptorInt(InteractionSite):
         Sets variables and water position for an acceptor interaction
         '''
 
-    def __init__(self, raw):
+    def __init__(self, raw, extraID=None):
 
-        InteractionSite.__init__(self, raw)
+        InteractionSite.__init__(self, raw, extraID)
 
         # Calculate water geometry w.r.t standard basis and origin as acceptor atom
         rot = totalRot(0, -(self.angleHOH - 0.5*np.pi), 0, np.array([1., 0., 0.]))
@@ -411,11 +411,6 @@ class AcceptorInt(InteractionSite):
 if __name__ == '__main__':
 
 # Input file format: siteInd neighbourInds target lp(optional)
-
-# Want to edit so either single command line argument or multiple at once
-# If an input file then it will have geometry store - but same for each molecule
-# then input rows of atomInd neighbours don/acc
-
     with open(str(sys.argv[1]), 'r') as inputFile:
         input = inputFile.readlines()
 
@@ -426,30 +421,37 @@ if __name__ == '__main__':
     geometry = gg.geomPulllog(geomFile, numAtoms)
     ids = gg.atomIdentify(geomFile, numAtoms)
 
-
-    # The remaining lines will contain the information for each donor/acceptor site
-# Read in raw data; then for each site set up geometry - do initially without lone pairs
+    # Create an acceptor/donor interactionSite object for each water interaction site
     siteIDs, siteList = [], []
-    # Read in raw data; then for each site set up geometry - do initially without lone pairs
     for el in input[1:]:
         siteIDs.append(el.split()[0])
         if el.split()[3] == 'don':
             siteList.append(DonorInt(el.split()))
         elif el.split()[3] == 'acc':
-            siteList.append(AcceptorInt(el.split()))
+            # If 4 neighbours then set up one for each face
+            neighbours = el.split()[2].split(',')
+            if len(neighbours) == 4:
+                ind = ['a', 'b', 'c', 'd']
+                for x in range(4):
+                    nbThree = [neighbours[x%4] + ',' + neighbours[(x+1)%4] + ',' + neighbours[(x+2)%4]]
+                    # Switch the original neighbour list for the three indexes in the input line
+                    siteList.append(AcceptorInt(el.split()[:2] + nbThree + el.split()[3:], extraID=ind[x]))
+            else:
+                siteList.append(AcceptorInt(el.split()))
 
     for site in siteList:
         planar = site.localGeom(geometry)
         site.setPositions()
 #        site.writeCoords(geometry, ids, name='maxIntCoords'+ site.atomID)
-        site.zMatWriter(geometry, ids, fileID=site.atomID)
+        site.zMatWriter(geometry, ids)
 
         # Test to see if linear or planar triple bonding plane, then set up reverse position
         if planar == True:
             site.bBasis = axisRot(np.radians(180), site.bBasis[0], site.bBasis)
             site.setPositions()
+            site.fileID += '_inv'
 #            site.writeCoords(geometry, ids, name='maxIntCoords_inv'+ site.atomID)
-            site.zMatWriter(geometry, ids, fileID=site.atomID + '_inv')
+            site.zMatWriter(geometry, ids)
 
         # Test to see if lone pair set up require
         if site.lonePairs == 2:
@@ -457,9 +459,11 @@ if __name__ == '__main__':
             site.bBasis = axisRot(np.radians(60), site.bBasis[0], site.bBasis)
             site.setPositions()
 #            site.writeCoords(geometry, ids, name='maxIntCoords_lp1'+ site.atomID)
-            site.zMatWriter(geometry, ids, fileID=site.atomID + '_lp1')
+            site.fileID += '_lp1'
+            site.zMatWriter(geometry, ids)
             site.bBasis = axisRot(np.radians(-120), site.bBasis[0], site.bBasis)
             site.setPositions()
+            site.fileID[-1] = '2'
 #            site.writeCoords(geometry, ids, name='maxIntCoords_lp2'+ site.atomID)
-            site.zMatWriter(geometry, ids, fileID=site.atomID + '_lp2')
+            site.zMatWriter(geometry, ids)
 
