@@ -197,8 +197,8 @@ class InteractionSite:
         if self.siteType == 'acc':
             if self.nNeighbours == 4:
                 fileID += '_' + str(self.neighbourInd[0])
-        elif self.inv == True:
-            fileID += '_inv'
+            elif self.inverse == True:
+                fileID += '_inv'
 
         with open('{}Int{}_{}.com'.format(self.siteType, fileID, format), 'w') as output:
             print('%Chk={}Int{}_{}'.format(self.siteType, fileID, format), file=output)
@@ -453,24 +453,26 @@ if __name__ == '__main__':
         site.idealzMat()
         site.writeOutput(geometry, ids, format='idealzMat')
 
-        # Test to see if linear or planar triple bonding plane, then set up reverse position
-        if planar == True:
-            site.bBasis = axisRot(np.radians(180), site.bBasis[0], site.bBasis)
-            site.setPositions()
-#            site.writeCoords(geometry, ids, name='maxIntCoords_inv'+ site.atomID)
-            site.idealzMat()
-            site.writeOutput(geometry, ids, extraID='_inv', format='idealzMat')
+        if site.siteType == 'acc':
 
-        # Test to see if lone pair set up require
-        if site.lonePairs == 2:
+            # Test to see if linear or planar triple bonding plane, then set up reverse position
+            if planar == True:
+                site.bBasis = axisRot(np.radians(180), site.bBasis[0], site.bBasis)
+                site.setPositions()
+    #            site.writeCoords(geometry, ids, name='maxIntCoords_inv'+ site.atomID)
+                site.idealzMat()
+                site.writeOutput(geometry, ids, extraID='_inv', format='idealzMat')
 
-            site.bBasis = axisRot(np.radians(60), site.bBasis[0], site.bBasis)
-            site.setPositions()
-            site.idealzMat()
-            site.writeOutput(geometry, ids, extraID='_lp1', format='idealzMat')
-            site.bBasis = axisRot(np.radians(-120), site.bBasis[0], site.bBasis)
-            site.setPositions()
-            site.idealzMat()
-            site.writeOutput(geometry, ids, extraID='_lp2', format='idealzMat')
+            # Test to see if lone pair set up require
+            if site.lonePairs == 2:
+
+                site.bBasis = axisRot(np.radians(60), site.bBasis[0], site.bBasis)
+                site.setPositions()
+                site.idealzMat()
+                site.writeOutput(geometry, ids, extraID='_lp1', format='idealzMat')
+                site.bBasis = axisRot(np.radians(-120), site.bBasis[0], site.bBasis)
+                site.setPositions()
+                site.idealzMat()
+                site.writeOutput(geometry, ids, extraID='_lp2', format='idealzMat')
 
 
