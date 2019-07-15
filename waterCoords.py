@@ -456,12 +456,12 @@ if __name__ == '__main__':
         if site.siteType == 'acc':
 
             # Test to see if linear or planar triple bonding plane, then set up reverse position
-            if planar == True:
+            if (planar == True) or (site.inverse == True):
+                site.inverse = True  # Set for file ID extension
                 site.bBasis = axisRot(np.radians(180), site.bBasis[0], site.bBasis)
                 site.setPositions()
-    #            site.writeCoords(geometry, ids, name='maxIntCoords_inv'+ site.atomID)
                 site.idealzMat()
-                site.writeOutput(geometry, ids, extraID='_inv', format='idealzMat')
+                site.writeOutput(geometry, ids, format='idealzMat')
 
             # Test to see if lone pair set up require
             if site.lonePairs == 2:
