@@ -2,11 +2,29 @@ import numpy as np
 import sys
 
 
-''' A module which contains functions to extract the geometry from a Gaussian log file and can calculate geomertic parameters
+''' A module which contains functions to extract geometries from Gaussian log files or xyz file, extract energies from Gaussian log files, and calculate geometric parameters
 '''
 
+def countAtoms(inputFile)
 
-def geomPulllog(inputFile, numAtoms, optStep=1):
+'''Function to count the number of atoms in a molecule from a gaussian log file
+
+    Inputs:
+     inputFile: Str - name of the input log file
+
+    Returns:
+     numAtoms: Int - The number of atoms in the system
+    '''
+
+    # Opens file and searches for line which contains the number of atoms in the system
+    with open(inputFile, 'r') as logFile:
+        for el in logFile:
+            if 'NAtoms' in el:
+                numAtoms = int(el.split()[1])
+    return(numAtoms)
+
+
+def geomPulllog(inputFile, numAtoms=None, optStep=1):
 
     '''Function which extracts the optimised geometry of a molecule in the standard orientation from a Guassian .log file. NB: The standard orientation output is at the start of the next optimisation cycle, before 'Optimized' would be met.
 
@@ -17,7 +35,11 @@ def geomPulllog(inputFile, numAtoms, optStep=1):
 
      Returns:
       molCoords: Numpy array (dim: numAtoms, 3) (float) - Results array of x, y, z coordinates for each atom
+      optimised: Bool - False if not optimised and true if optimised geometry
     '''
+    # If number of atoms is not inputted then searches file for the number
+    if numAtoms == None:
+        numAtoms = countAtoms(inputFile)
 
     # Number of 'optimized steps' encountered through file
     optCount = 0
@@ -40,10 +62,13 @@ def geomPulllog(inputFile, numAtoms, optStep=1):
             # Increments optCount if 'Optimized' met, breaks loop if target opt step is reached
             if 'Optimized Parameters' in el:
                 optCount += 1
+                optimised = True
+                if 'Non-Optimized' in el:
+                    optimised = False
             if (optCount == optStep):
-                return(molCoords)
-    return(molCoords)
-
+                return(molCoords, optimised)
+                break
+    return(molCoords, optimised)
 
 
 def energyPull(inputFile, optStep=1):
@@ -56,6 +81,7 @@ def energyPull(inputFile, optStep=1):
 
         Returns:
         molEnergy: float -  SCF Done energy
+        optimised: Bool - False if not optimised and true if optimised geometry
         '''
 
     # Number of 'optimized steps' encountered through file
@@ -70,9 +96,14 @@ def energyPull(inputFile, optStep=1):
             # Increments optCount if 'Optimized' met, breaks loop if target opt step is reached
             if 'Optimized Parameters' in el:
                 optCount += 1
+                optimised = True
+                if 'Non-Optimized' in el:
+                    optimised = False
+
             if (optCount == optStep):
-                return(molEnergy)
-    return(molEnergy)
+                return(molEnergy, optimised)
+                break
+    return(molEnergy, optimised)
 
 
 def geomPullxyz(inputFile):
@@ -108,7 +139,7 @@ def geomPullxyz(inputFile):
     return(molCoords, atomIDs)
 
 
-def atomIdentify(inputFile, numAtoms):
+def atomIdentify(inputFile, numAtoms=None):
 
     '''Function which extracts the atom IDs from a gaussian log file.
 
@@ -119,6 +150,9 @@ def atomIdentify(inputFile, numAtoms):
          Returns:
           atomIDs: List of str - atom IDs
         '''
+    # If number of atoms is not inputted then searches file for the number
+    if numAtoms == None:
+        numAtoms = countAtoms(inputFile)
 
     atomIDs = []
     with open(inputFile, 'r') as logFile:
