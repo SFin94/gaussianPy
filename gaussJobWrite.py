@@ -109,7 +109,7 @@ elif args.geom == 'allchk':
 elif args.geom[-4:] == '.log':
     with open(args.geom, 'r') as logFile:
         for el in logFile:
-            if 'Charge' in el:
+            if ('Charge' in el) and ('Multiplicity' in el):
                 moleculeGeom = [el.split()[2] + ' ' + el.split()[-1]]
     ids = gg.atomIdentify(args.geom)
     optStep = input("If scan log file enter which optimised geometry to pull (press enter to skip)")
