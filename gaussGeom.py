@@ -5,9 +5,9 @@ import sys
 ''' A module which contains functions to extract geometries from Gaussian log files or xyz file, extract energies from Gaussian log files, and calculate geometric parameters
 '''
 
-def countAtoms(inputFile)
+def countAtoms(inputFile):
 
-'''Function to count the number of atoms in a molecule from a gaussian log file
+    '''Function to count the number of atoms in a molecule from a gaussian log file
 
     Inputs:
      inputFile: Str - name of the input log file
