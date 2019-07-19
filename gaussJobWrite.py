@@ -59,7 +59,7 @@ memMB = 45000
 
 '''
     Current default job types available are:
-        Default: Opt, Freq
+        Opt, Freq (default)
         Opt (w/woutModRedundant flag set)
         Freq
         TS: Opt(TS,NoEigen,RCFC) Freq
@@ -111,12 +111,12 @@ elif args.geom[-4:] == '.log':
         for el in logFile:
             if 'Charge' in el:
                 moleculeGeom = [el.split()[2] + ' ' + el.split()[-1]]
-            if 'NAtoms' in el:
-                numAtoms = int(el.split()[1])
-                break
-    ids = gg.atomIdentify(args.geom, numAtoms)
-    geometry = gg.geomPulllog(args.geom, numAtoms)
-    for atom in range(numAtoms):
+    ids = gg.atomIdentify(args.geom)
+    optStep = input("If scan log file enter which optimised geometry to pull (press enter to skip)")
+    if optStep == '':
+        optStep = 1
+    geometry = gg.geomPulllog(args.geom, optStep=int(optStep))[0]
+    for atom in range(len(ids)):
         moleculeGeom.append('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format(ids[atom], geometry[atom,:]))
 
 # Sets modredundant input from next section or user input
