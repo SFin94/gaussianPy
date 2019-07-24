@@ -45,6 +45,7 @@ def geomPulllog(inputFile, numAtoms=None, optStep=1):
     optCount = 0
     # Set up array for coordinates
     molCoords = np.zeros((numAtoms, 3))
+    optimised = False
 
     # Open and read input file
     with open(inputFile, 'r') as logFile:
@@ -63,8 +64,6 @@ def geomPulllog(inputFile, numAtoms=None, optStep=1):
             if 'Optimized Parameters' in el:
                 optCount += 1
                 optimised = True
-                if 'Non-Optimized' in el:
-                    optimised = False
             if (optCount == optStep):
                 return(molCoords, optimised)
                 break
