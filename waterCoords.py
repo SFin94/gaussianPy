@@ -277,21 +277,32 @@ class DonorInt(InteractionSite):
 
     def idealzMat(self, numAtoms):
 
-        # Currently just copied and pasted in to place
-        # For ideal water O has one opt var and need to calculate angles and dihedrals
+        '''
+            Class method which sets up and calculates the z-matrix for an 'idealised' interaction between
+            the tip3p water and the donor atom. The interaction distance (rDO) and the dihedral rotation
+            of the water molecule (HODx/-HODx) are optimised.
+
+            The method sets:
+             self.optVar: dict - the variables which are to be optimised
+             self.zMatList: list of dicts - the dicts are the z matrix configurations (R, A, D) for the tip3p water atoms
+
+            Parameters:
+             numAtoms: int - number of atoms in the molecule
+        '''
+
+        # Define water O z-matrix configuration
         OHx1 = gg.atomAngle(self.waterPos[1], self.coords, self.dummyAtoms[0])
         OHx1x2 = gg.atomDihedral(self.waterPos[1], self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
         waterOzMat = {'Ow': numAtoms+3, self.atomID: 'rDO', 'x1': OHx1, 'x2': OHx1x2}
 
-        # For water H geom; both r: bondOH; both ang: donor H and diheds: to same dummy and  left to opt
-        Hw1A = (180 - 104.52/2.)
-        waterH1zMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H1wOHx'}
-        waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H2wOHx'}
+        # Define water H z-matrix configurations
+        HOD = (180 - 104.52/2.)
+        waterH1zMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.atomID: HOD, 'x2': 'H1ODx'}
+        waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: HOD, 'x2': 'H2ODx'}
 
-        # Calculate initial values for opt variables
-        H1wOHx = gg.atomDihedral(self.waterPos[0], self.waterPos[1], self.coords, self.dummyAtoms[1])
-        H2wOHx = gg.atomDihedral(self.waterPos[2], self.waterPos[1], self.coords, self.dummyAtoms[1])
-        self.optVar = {'rDO': 2.00, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
+        # Calculate and set initial values for opt variables
+        HODx = gg.atomDihedral(self.waterPos[0], self.waterPos[1], self.coords, self.dummyAtoms[1])
+        self.optVar = {'rDO': 2.00, 'H1ODx': HODx, 'H2ODx': -HODx}
 
         # Set list for writing the Z matrix section
         self.zMatList = [waterOzMat, waterH1zMat, waterH2zMat]
@@ -305,9 +316,9 @@ class DonorInt(InteractionSite):
         OHx1x2 = gg.atomDihedral(self.waterPos[1], self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
 
         # For water H geom; both r: bondOH; angle of first to H; second to water angleHOH; do dihedrals to first dummy
-        Hw1A = (180 - 104.52/2.)
-        waterH1zMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H1ODx'}
-        waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H2ODx'}
+        HOD = (180 - 104.52/2.)
+        waterH1zMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.atomID: HOD, 'x2': 'H1ODx'}
+        waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: HOD, 'x2': 'H2ODx'}
 
         H1ODx = gg.atomDihedral(self.waterPos[0], self.waterPos[1], self.coords, self.dummyAtoms[1])
         H2ODx = gg.atomDihedral(self.waterPos[2], self.waterPos[1], self.coords, self.dummyAtoms[1])
@@ -353,22 +364,35 @@ class AcceptorInt(InteractionSite):
 
     def idealzMat(self, numAtoms):
 
-        # Currently just copied and pasted in to place
-          # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (fixed)
+        '''
+        Class method which sets up and calculates the z-matrix for an 'idealised' interaction between
+        the tip3p water and the acceptor atom. The interaction distance (rAH) and the dihedral rotation
+        of the water molecule (HOAx) are optimised. The angle between the water O, H and acceptor atom
+        is defined for the set up and left to optimise as it is not independant of HOAx.
+
+        The method sets:
+         self.optVar: dict - the variables which are to be optimised
+         self.zMatList: list of dicts - the dicts are the z matrix configurations (R, A, D) for the tip3p water atoms
+
+        Parameters:
+         numAtoms: int - number of atoms in the molecule
+        '''
+
+        # Define interacting water H z-matrix configuration
         HAx1 = gg.atomAngle(self.waterPos[0], self.coords, self.dummyAtoms[0])
         HAx1x2 = gg.atomDihedral(self.waterPos[0], self.coords, self.dummyAtoms[0], self.dummyAtoms[1])
         waterH1zMat = {'H1w': numAtoms+3, self.atomID: 'rAH', 'x1': HAx1, 'x2': HAx1x2}
 
-        # Second attempt trying to maintain linear interaction
+        # Define water O z-matrix configuration
         OHx = gg.atomAngle(self.waterPos[1], self.waterPos[0], self.dummyAtoms[0])
-        ODihed = gg.atomDihedral(self.waterPos[1], self.waterPos[0], self.dummyAtoms[0], self.coords)
-        waterOzMat = {'Ow': numAtoms+4, 'H1w': self.bondOH, 'x2': 'OHx', self.atomID: ODihed}
+        OHxA = gg.atomDihedral(self.waterPos[1], self.waterPos[0], self.dummyAtoms[0], self.coords)
+        waterOzMat = {'Ow': numAtoms+4, 'H1w': self.bondOH, 'x2': 'OHx', self.atomID: OHxA}
 
-        # Define 2nd H with r: OH bond distance to O; angle to Acceptor and dihed to dummy (left to opt)
-        H2Ang = gg.atomAngle(self.waterPos[2], self.waterPos[1], self.coords)
-        waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: H2Ang, 'x2': 'HOAx'}
+        # Define non-interacting water H z-matrix configuration
+        HOA = gg.atomAngle(self.waterPos[2], self.waterPos[1], self.coords)
+        waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: HOA, 'x2': 'HOAx'}
 
-        # Calculate initial values for opt variables
+        # Calculate and set initial values for opt variables
         HOAx = gg.atomDihedral(self.waterPos[2], self.waterPos[1], self.coords, self.dummyAtoms[1])
         self.optVar = {'rAH': 2.00, 'HOAx': HOAx, 'OHx': OHx}
 
