@@ -126,29 +126,37 @@ class InteractionSite:
 
         # Test the triple product of the neighbour bond vectors
         # If close to 0 then they lie in the same plane and switch b1 for the orthogonal b2 or b3
-        tol = 1e-03
-        if (len(self.neighbourInd) == 3) and (abs(tripleProduct(self.neighbourBonds))) < tol:
-            if abs(tripleProduct([self.neighbourBonds[0], self.neighbourBonds[1], b2])) < tol:
-                self.bBasis = np.array([b2, b1, b3])
-            else:
-                self.bBasis = np.array([b1, b3, b2])
-            return(True)
+        invTol = 2
+        planarTol = 1e-02
+        if (len(self.neighbourInd) == 3):
+            inverse = ((abs(tripleProduct(self.neighbourBonds))) < invTol)
+            if (abs(tripleProduct(self.neighbourBonds))) < planarTol:
+                if abs(tripleProduct([self.neighbourBonds[0], self.neighbourBonds[1], b2])) < planarTol:
+                    self.bBasis = np.array([b2, b1, b3])
+                else:
+                    self.bBasis = np.array([b1, b3, b2])
+
         # Test if two neighbours whether they are linear, if so switch basis vectors
-        elif (len(self.neighbourInd) == 2) and (abs(np.dot(self.neighbourBonds[0], self.neighbourBonds[1])) < tol):
+        elif (len(self.neighbourInd) == 2) and (abs(np.dot(self.neighbourBonds[0], self.neighbourBonds[1])) < planarTol):
             print('linear')
-            if abs(np.dot(self.neighbourBonds[0], b2)) < tol:
+            if abs(np.dot(self.neighbourBonds[0], b2)) < planarTol:
                 self.bBasis = np.array([b2, b1, b3])
             else:
                 self.bBasis = np.array([b1, b3, b2])
-            return(True)
+            # Would want set up either side of bond so set inverse to true
+            inverse = True
+
+        else:
+            inverse = False
 
         # Test which of b3/b2 are orthogonal to the plane of the bonds to define x and y (set y as orthogonal)
-        elif (len(self.neighbourInd) == 2) and (abs(tripleProduct([self.neighbourBonds[0], self.neighbourBonds[1], b3])) < tol):
+        if (len(self.neighbourInd) == 2) and (abs(tripleProduct([self.neighbourBonds[0], self.neighbourBonds[1], b3])) < planarTol):
             self.bBasis = np.array([b3, b2, b1])
 
         else:
             self.bBasis = np.array([b2, b3, b1])
-        return(False)
+
+        return(inverse)
 
 
     def transformBasis(self, transformMat=None, fetaX=0, fetaY=0, fetaZ=0, rotate=False):
@@ -220,15 +228,15 @@ class InteractionSite:
                     zMatInput = '{:<4}'.format(list(waterAtom.keys())[0])
                     for entry in list(waterAtom.items())[1:]:
                         if isinstance(entry[1], str):
-                            zMatInput += '{:>4}{: >8}'.format(entry[0], entry[1])
+                            zMatInput += '{:>4}{: >10}'.format(entry[0], entry[1])
                         else:
-                            zMatInput += '{:>4}{: >8.2f}'.format(entry[0], entry[1])
+                            zMatInput += '{:>4}{: 10.4f}'.format(entry[0], entry[1])
                     print(zMatInput, file=output)
                 # Print out the variables section
                 print('', file=output)
                 # Enter initial variables
                 for var, inVal in self.optVar.items():
-                    print('{:<8}{:>6.2f}'.format(var, inVal), file=output)
+                    print('{:<8}{:>8.4f}'.format(var, inVal), file=output)
 
             # Write in coordinates format
             else:
@@ -240,7 +248,7 @@ class InteractionSite:
 
 class DonorInt(InteractionSite):
 
-    '''Child class of Interaction Site
+    ''' Child class of Interaction Site
         Sets variables and water position for a donor interaction
     '''
 
@@ -267,7 +275,7 @@ class DonorInt(InteractionSite):
         dTwo = self.coords + self.bBasis[1]
         return([dOne, dTwo])
 
-    def idealzMat(self):
+    def idealzMat(self, numAtoms):
 
         # Currently just copied and pasted in to place
         # For ideal water O has one opt var and need to calculate angles and dihedrals
@@ -288,7 +296,7 @@ class DonorInt(InteractionSite):
         # Set list for writing the Z matrix section
         self.zMatList = [waterOzMat, waterH1zMat, waterH2zMat]
 
-    def maxIntzMat(self):
+    def maxIntzMat(self, numAtoms):
 
         # Currently just copied and pasted in to place
         # For water O has three opt vars and calculates initial values
@@ -298,21 +306,21 @@ class DonorInt(InteractionSite):
 
         # For water H geom; both r: bondOH; angle of first to H; second to water angleHOH; do dihedrals to first dummy
         Hw1A = (180 - 104.52/2.)
-        waterH1zMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H1wOHx'}
-        waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H2wOHx'}
+        waterH1zMat = {'H1w': numAtoms+4, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H1ODx'}
+        waterH2zMat = {'H2w': numAtoms+5, 'Ow': self.bondOH, self.atomID: Hw1A, 'x2': 'H2ODx'}
 
-        H1wOHx = gg.atomDihedral(self.waterPos[0], self.waterPos[1], self.coords, self.dummyAtoms[1])
-        H2wOHx = gg.atomDihedral(self.waterPos[2], self.waterPos[1], self.coords, self.dummyAtoms[1])
+        H1ODx = gg.atomDihedral(self.waterPos[0], self.waterPos[1], self.coords, self.dummyAtoms[1])
+        H2ODx = gg.atomDihedral(self.waterPos[2], self.waterPos[1], self.coords, self.dummyAtoms[1])
 
-        self.optVar = {'rDO': 2.00, 'OHx1': OHx1, 'OHx1x2': OHx1x2, 'H1wOHx': H1wOHx, 'H2wOHx': H2wOHx}
+        self.optVar = {'rDO': 2.00, 'OHx1': OHx1, 'OHx1x2': OHx1x2, 'H1ODx': H1ODx, 'H2ODx': H2ODx}
         self.zMatList = [waterOzMat, waterH1zMat, waterH2zMat]
 
 
 class AcceptorInt(InteractionSite):
 
-    '''Child class of Interaction Site
+    ''' Child class of Interaction Site
         Sets variables and water position for an acceptor interaction
-        '''
+    '''
 
     def __init__(self, raw, nNeighbours=None, lp=0, inv=False):
 
@@ -343,7 +351,7 @@ class AcceptorInt(InteractionSite):
         dThree = self.waterPos[0] + self.bBasis[0]
         return([dOne, dTwo, dThree])
 
-    def idealzMat(self):
+    def idealzMat(self, numAtoms):
 
         # Currently just copied and pasted in to place
           # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (fixed)
@@ -352,9 +360,9 @@ class AcceptorInt(InteractionSite):
         waterH1zMat = {'H1w': numAtoms+3, self.atomID: 'rAH', 'x1': HAx1, 'x2': HAx1x2}
 
         # Second attempt trying to maintain linear interaction
-        OAng = gg.atomAngle(self.waterPos[1], self.waterPos[0], self.dummyAtoms[0])
+        OHx = gg.atomAngle(self.waterPos[1], self.waterPos[0], self.dummyAtoms[0])
         ODihed = gg.atomDihedral(self.waterPos[1], self.waterPos[0], self.dummyAtoms[0], self.coords)
-        waterOzMat = {'Ow': numAtoms+4, 'H1w': self.bondOH, 'x2': OAng, self.atomID: ODihed}
+        waterOzMat = {'Ow': numAtoms+4, 'H1w': self.bondOH, 'x2': 'OHx', self.atomID: ODihed}
 
         # Define 2nd H with r: OH bond distance to O; angle to Acceptor and dihed to dummy (left to opt)
         H2Ang = gg.atomAngle(self.waterPos[2], self.waterPos[1], self.coords)
@@ -362,15 +370,14 @@ class AcceptorInt(InteractionSite):
 
         # Calculate initial values for opt variables
         HOAx = gg.atomDihedral(self.waterPos[2], self.waterPos[1], self.coords, self.dummyAtoms[1])
-        self.optVar = {'rAH': 2.00, 'HOAx': HOAx}
+        self.optVar = {'rAH': 2.00, 'HOAx': HOAx, 'OHx': OHx}
 
         # Set list for writing the Z matrix section
         self.zMatList = [waterH1zMat, waterOzMat, waterH2zMat]
 
 
-    def maxIntzMat(self):
+    def maxIntzMat(self, numAtoms):
 
-        # Currently just copied and pasted in to place
         # Define interacting H: rAh to Acceptor to opt; angle and dihed to dummy atoms (opt)
         waterH1zMat = {'H1w': numAtoms+3, self.atomID: 'rAH', 'x1': 'HAx1', 'x2': 'HAx1x2'}
 
@@ -394,13 +401,23 @@ class AcceptorInt(InteractionSite):
         self.zMatList = [waterH1zMat, waterOzMat, waterH2zMat]
 
 
-def inputParse(input):
+def inputParse(inputFile):
+
     # Create an acceptor/donor interactionSite object for each water interaction site
+    with open(inputFile, 'r') as iFile:
+        input = iFile.readlines()
+
+    # Pull the geometry and atomIDs from the log file
+    geomFile = input[0].split()[0]
+    numAtoms = int(input[0].split()[1])
+
+    geometry = gg.geomPulllog(geomFile, numAtoms)[0]
+    ids = gg.atomIdentify(geomFile, numAtoms)
 
     # Empty list for interaction site object
     siteList = []
 
-    for el in input:
+    for el in input[1:]:
         # Skip line if comment
         if el[0] != '#':
             # If donor then doesn't need anymore processing
@@ -428,51 +445,44 @@ def inputParse(input):
                         siteList.append(AcceptorInt(input[:-1], lp=int(input[-1]), inv=inverse))
                     else:
                         siteList.append(AcceptorInt(input, inv=inverse))
-    return(siteList)
+    return(siteList, geometry, ids)
 
 
-if __name__ == '__main__':
-
-# Input file format: siteInd neighbourInds target lp(optional)
-    with open(str(sys.argv[1]), 'r') as inputFile:
-        input = inputFile.readlines()
-
-    # Pull the geometry and atomIDs from the log file
-    geomFile = input[0].split()[0]
-    numAtoms = int(input[0].split()[1])
-
-    geometry = gg.geomPulllog(geomFile, numAtoms)
-    ids = gg.atomIdentify(geomFile, numAtoms)
-
-    # Create an acceptor/donor interactionSite object for each water interaction site
-    siteList = inputParse(input[1:])
-
-    for site in siteList:
-        planar = site.localGeom(geometry)
-        site.setPositions()
-        site.idealzMat()
-        site.writeOutput(geometry, ids, format='idealzMat')
-
-        if site.siteType == 'acc':
-
-            # Test to see if linear or planar triple bonding plane, then set up reverse position
-            if (planar == True) or (site.inverse == True):
-                site.inverse = True  # Set for file ID extension
-                site.bBasis = axisRot(np.radians(180), site.bBasis[0], site.bBasis)
-                site.setPositions()
-                site.idealzMat()
-                site.writeOutput(geometry, ids, format='idealzMat')
-
-            # Test to see if lone pair set up require
-            if site.lonePairs == 2:
-
-                site.bBasis = axisRot(np.radians(60), site.bBasis[0], site.bBasis)
-                site.setPositions()
-                site.idealzMat()
-                site.writeOutput(geometry, ids, extraID='_lp1', format='idealzMat')
-                site.bBasis = axisRot(np.radians(-120), site.bBasis[0], site.bBasis)
-                site.setPositions()
-                site.idealzMat()
-                site.writeOutput(geometry, ids, extraID='_lp2', format='idealzMat')
+#if __name__ == '__main__':
+#
+#    # Create an acceptor/donor interactionSite object for each water interaction site
+#    siteList, geometry, ids = inputParse(str(sys.argv[1]))
+#
+#    for site in siteList:
+#        planar = site.localGeom(geometry)
+#        site.setPositions()
+#        #site.idealzMat()
+#        site.maxIntzMat()
+#        site.writeOutput(geometry, ids, format='maxzMat') #format='idealzMat')
+#
+#        if site.siteType == 'acc':
+#
+#            # Test to see if linear or planar triple bonding plane, then set up reverse position
+#            if (planar == True) or (site.inverse == True):
+#                site.inverse = True  # Set for file ID extension
+#                site.bBasis = axisRot(np.radians(180), site.bBasis[0], site.bBasis)
+#                site.setPositions()
+##                site.idealzMat()
+#                site.maxIntzMat()
+#                site.writeOutput(geometry, ids, format='maxzMat') #format='idealzMat')
+#
+#            # Test to see if lone pair set up require
+#            if site.lonePairs == 2:
+#
+#                site.bBasis = axisRot(np.radians(60), site.bBasis[0], site.bBasis)
+#                site.setPositions()
+##                site.idealzMat()
+#                site.maxIntzMat()
+#                site.writeOutput(geometry, ids, extraID='_lp1', format='maxzMat') #format='idealzMat')
+#                site.bBasis = axisRot(np.radians(-120), site.bBasis[0], site.bBasis)
+#                site.setPositions()
+##                site.idealzMat()
+#                site.maxIntzMat()
+#                site.writeOutput(geometry, ids, extraID='_lp2', format='maxzMat') #format='idealzMat')
 
 
