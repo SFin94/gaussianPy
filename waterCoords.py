@@ -95,6 +95,17 @@ class InteractionSite:
         self.atomID = raw[0] + raw[1]
         self.atomInd = int(raw[1])
 
+        # Test to see if lone pairs or if inverse set up needed
+        if 'inv' in raw:
+            self.inverse = True
+        else:
+            self.inverse = False
+
+        if 'lp' in raw[-1]:
+            self.lonePairs = int(raw[-1][-1])
+        else:
+            self.lonePairs = 0
+
         # Set the list of covalently bonded neighbours
         self.neighbourInd = []
         for nB in raw[2].split(','):
@@ -103,7 +114,44 @@ class InteractionSite:
         # Assign the type of site to be set up
         self.siteType = str(raw[3])
 
+
+    def planarCheck(self):
+
+        '''
+        Class method which checks whether the bonds are linear (two neighbours) or lie within a single plane (three neighbours).
+
+        Returns:
+            Bool - in response to planairty test, if True then can't use the centroid of the bonds as b1 so set as the cross product of two neighbour bonds
+        '''
+
+        invTol = 2
+        planarTol = 1e-02
+
+        print(self.atomInd)
+        if len(self.neighbourBonds) == 3:
+            print(abs(tripleProduct(self.neighbourBonds)))
+            self.inverse = ((abs(tripleProduct(self.neighbourBonds))) < invTol)
+            return(abs(tripleProduct(self.neighbourBonds)) < planarTol)
+
+        elif len(self.neighbourBonds) == 2:
+            return(abs(np.dot(self.neighbourBonds[0], self.neighbourBonds[1])) < planarTol)
+
+        else:
+            return(False)
+
+
     def localGeom(self, geometry):
+
+        '''
+        Class method which checks the local geometry of the interaction site and sets up an orthogonal basis set to use in placing dummy atoms and water
+
+        Sets the class attributes:
+         self.bBasis: numpy array (dim: 3 x 3) - orthogonal basis set used to set up the water and dummy atom positions. The basis is set so that bx lies within the bonding plane if 2 neighbours and by lies orthogonal to the bonding plane. [NB: If there are 3 or more neighbours then order of bx/by does't matter. bz lies furthest away from the neighbour bonds to postion the water molecule in the most space.
+
+        Parameters:
+         geometry: Numpy array (dim: nAtoms x 3) - x, y, z coordinates of each atom in the molecule
+
+        '''
 
         # Set the coordinates of the covalently bonded neighbours
         self.coords = geometry[self.atomInd-1]
@@ -114,49 +162,24 @@ class InteractionSite:
         # Calculate bond vectors
         self.neighbourBonds = neighbours - self.coords
 
-        # Find centroid of the bonds and normalise for first basis vector
-        b1 = np.sum(self.neighbourBonds, axis=0)/len(self.neighbourInd)
-        b1 /= np.linalg.norm(b1)
-
-        # Find orthonormal basis from b1 using cross products
-        b2 = np.cross(self.coords, b1)
-        b2 /= np.linalg.norm(b2)
-        b3 = np.cross(b2, b1)
-        b3 /= np.linalg.norm(b3)
-
-        # Test the triple product of the neighbour bond vectors
-        # If close to 0 then they lie in the same plane and switch b1 for the orthogonal b2 or b3
-        invTol = 2
-        planarTol = 1e-02
-        if (len(self.neighbourInd) == 3):
-            inverse = ((abs(tripleProduct(self.neighbourBonds))) < invTol)
-            if (abs(tripleProduct(self.neighbourBonds))) < planarTol:
-                if abs(tripleProduct([self.neighbourBonds[0], self.neighbourBonds[1], b2])) < planarTol:
-                    self.bBasis = np.array([b2, b1, b3])
-                else:
-                    self.bBasis = np.array([b1, b3, b2])
-
-        # Test if two neighbours whether they are linear, if so switch basis vectors
-        elif (len(self.neighbourInd) == 2) and (abs(np.dot(self.neighbourBonds[0], self.neighbourBonds[1])) < planarTol):
-            print('linear')
-            if abs(np.dot(self.neighbourBonds[0], b2)) < planarTol:
-                self.bBasis = np.array([b2, b1, b3])
-            else:
-                self.bBasis = np.array([b1, b3, b2])
-            # Would want set up either side of bond so set inverse to true
-            inverse = True
-
+        # Check planarity/linearity of neighbour bonds and set b1 basis vector accordingly (True: cross product; False: centroid of neighbours bonds)
+        if (self.planarCheck()):
+            bz = np.cross(self.neighbourBonds[0], self.neighbourBonds[1])
         else:
-            inverse = False
+            bz = np.sum(self.neighbourBonds, axis=0)/len(self.neighbourInd)
+        bz /= np.linalg.norm(bz)
 
-        # Test which of b3/b2 are orthogonal to the plane of the bonds to define x and y (set y as orthogonal)
-        if (len(self.neighbourInd) == 2) and (abs(tripleProduct([self.neighbourBonds[0], self.neighbourBonds[1], b3])) < planarTol):
-            self.bBasis = np.array([b3, b2, b1])
+        # Find orthonormal basis from bz using cross products
+        bx = np.cross(self.coords, bz)
+        bx /= np.linalg.norm(bx)
+        by = np.cross(bx, bz)
+        by /= np.linalg.norm(by)
 
+        # For two neighbour bonds, test which of bx/y lie orthogonal (should be y) to the bonding plane and which parallel (should be x), and set the basis vector order accordingly.
+        if (len(self.neighbourInd) == 2) and (abs(tripleProduct([self.neighbourBonds[0], self.neighbourBonds[1], by])) < 1e-02):
+            self.bBasis = np.array([by, bx, bz])
         else:
-            self.bBasis = np.array([b2, b3, b1])
-
-        return(inverse)
+            self.bBasis = np.array([bx, by, bz])
 
 
     def transformBasis(self, transformMat=None, fetaX=0, fetaY=0, fetaZ=0, rotate=False):
@@ -195,8 +218,8 @@ class InteractionSite:
         ''' Function which writes a gaussian input file with the constrained optimisation input in z matrix form
 
             Inputs:
-             geometry: x, y, z coordinates of each atom in the molecule
-             atomIDs: List of atomIDs in the molecule
+             geometry: Numpy array (dim: nAtoms x 3) - x, y, z coordinates of each atom in the molecule
+             atomIDs: List of str - atomIDs of the atoms in the molecule
              name: str - optional add on identifier for the input file (default: 'zMat')
         '''
 
@@ -205,8 +228,6 @@ class InteractionSite:
         if self.siteType == 'acc':
             if self.nNeighbours == 4:
                 fileID += '_' + str(self.neighbourInd[0])
-            elif self.inverse == True:
-                fileID += '_inv'
 
         with open('{}Int{}_{}.com'.format(self.siteType, fileID, format), 'w') as output:
             print('%Chk={}Int{}_{}'.format(self.siteType, fileID, format), file=output)
@@ -333,7 +354,7 @@ class AcceptorInt(InteractionSite):
         Sets variables and water position for an acceptor interaction
     '''
 
-    def __init__(self, raw, nNeighbours=None, lp=0, inv=False):
+    def __init__(self, raw, nNeighbours=None):
 
         # Instantiate parent class
         InteractionSite.__init__(self, raw)
@@ -343,16 +364,15 @@ class AcceptorInt(InteractionSite):
         else:
             self.nNeighbours = nNeighbours
 
+        if nNeighbours == 4:
+            self.inverse = True
+
         # Calculate water geometry w.r.t standard basis and origin as acceptor atom
         rot = totalRot(0, -(self.angleHOH - 0.5*np.pi), 0, np.array([1., 0., 0.]))
         H1 = np.array([0, 0, 2])
         O = H1 + np.array([0, 0, self.bondOH])
         H2 = O + rot*self.bondOH
         self.waterGeom = np.array([H1, O, H2])
-
-        # Set additional acceptor type attributes
-        self.lonePairs = lp
-        self.inverse = inv
 
 
     def dummySetUp(self):
@@ -456,57 +476,9 @@ def inputParse(inputFile):
                     for x in range(4):
                         nbThree = [neighbours[x%4] + ',' + neighbours[(x+1)%4] + ',' + neighbours[(x+2)%4]]
                         # Switch the original neighbour list for the three indexes in the input line
-                        siteList.append(AcceptorInt(el.split()[:2] + nbThree + el.split()[3:], nNeighbours=4, inv=True))
-
+                        siteList.append(AcceptorInt(el.split()[:2] + nbThree + el.split()[3:], nNeighbours=4))
                 else:
-                    # Set lonepairs and inverse if additional arguments
-                    input = el.split()
-                    if 'inv' in input:
-                        inverse = True
-                        input.remove('inv')
-                    else: inverse = False
-                    if len(input) > 4:
-                        siteList.append(AcceptorInt(input[:-1], lp=int(input[-1]), inv=inverse))
-                    else:
-                        siteList.append(AcceptorInt(input, inv=inverse))
+                    siteList.append(AcceptorInt(el.split()))
     return(siteList, geometry, ids)
-
-
-#if __name__ == '__main__':
-#
-#    # Create an acceptor/donor interactionSite object for each water interaction site
-#    siteList, geometry, ids = inputParse(str(sys.argv[1]))
-#
-#    for site in siteList:
-#        planar = site.localGeom(geometry)
-#        site.setPositions()
-#        #site.idealzMat()
-#        site.maxIntzMat()
-#        site.writeOutput(geometry, ids, format='maxzMat') #format='idealzMat')
-#
-#        if site.siteType == 'acc':
-#
-#            # Test to see if linear or planar triple bonding plane, then set up reverse position
-#            if (planar == True) or (site.inverse == True):
-#                site.inverse = True  # Set for file ID extension
-#                site.bBasis = axisRot(np.radians(180), site.bBasis[0], site.bBasis)
-#                site.setPositions()
-##                site.idealzMat()
-#                site.maxIntzMat()
-#                site.writeOutput(geometry, ids, format='maxzMat') #format='idealzMat')
-#
-#            # Test to see if lone pair set up require
-#            if site.lonePairs == 2:
-#
-#                site.bBasis = axisRot(np.radians(60), site.bBasis[0], site.bBasis)
-#                site.setPositions()
-##                site.idealzMat()
-#                site.maxIntzMat()
-#                site.writeOutput(geometry, ids, extraID='_lp1', format='maxzMat') #format='idealzMat')
-#                site.bBasis = axisRot(np.radians(-120), site.bBasis[0], site.bBasis)
-#                site.setPositions()
-##                site.idealzMat()
-#                site.maxIntzMat()
-#                site.writeOutput(geometry, ids, extraID='_lp2', format='maxzMat') #format='idealzMat')
 
 
