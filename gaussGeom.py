@@ -70,7 +70,7 @@ def geomPulllog(inputFile, numAtoms=None, optStep=1):
     return(molCoords, optimised)
 
 
-def energyPull(inputFile, optStep=1):
+def energyPull(inputFile, optStep=1, mp2=False):
 
     '''Function which extracts the optimised energy of a molecule from a Guassian .log file. NB: The SCF Done output is at the start of the next optimisation cycle, before 'Optimized' would be met.
 
@@ -91,6 +91,11 @@ def energyPull(inputFile, optStep=1):
             # SCF Done output precedes the correspdoning optimisation section
             if 'SCF Done:' in el:
                 molEnergy = float(el.split('=')[1].split()[0])
+            # MP2 energy printed out seperately - has to be processed to float form
+            if mp2 == True:
+                if 'EUMP2' in el:
+                    mp2Raw = el.split('=')[2].strip()
+                    molEnergy = float(mp2Raw.split('D')[0])*np.power(10, float(mp2Raw.split('D')[1]))
 
             # Increments optCount if 'Optimized' met, breaks loop if target opt step is reached
             if 'Optimized Parameters' in el:
@@ -136,6 +141,22 @@ def geomPullxyz(inputFile):
                     molCoords[ind, jind] = float(el.split()[jind])
 
     return(molCoords, atomIDs)
+
+
+def geomPushxyz(outputFile):
+
+    '''Function which outputs the extracted geometry to an .xyz file.
+
+        Parameters:
+         outputFile: Str - name of the output xyz file
+    '''
+
+    # Open output file, print header lines then atom indexes and cartesian coordinates to file
+    with open(outputFile + '.xyz', 'w+') as output:
+        print(numAtoms, file=output)
+        print('Structure of {} from {}'.format(fileName, inputFile), file=output)
+        for atomInd, atom in enumerate(atomID):
+            print('{0:<4} {1[0]: >10f} {1[1]: >10f} {1[2]: >10f}'.format(atom, coordinates[atomInd]), file=output)
 
 
 def atomIdentify(inputFile, numAtoms=None):
