@@ -227,7 +227,7 @@ if __name__ == '__main__':
             trackedParams = parseTrackedParams(args.trackedInput[0])
             colNames += (list(trackedParams))
         else:
-            trackedParams = []
+            trackedParams = {}
 
         # Set up results dataframe and scan information from first input file
         scanResults = pd.DataFrame(columns=colNames)
