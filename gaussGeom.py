@@ -188,16 +188,27 @@ def atomIdentify(inputFile, numAtoms=None):
     return(atomIDs)
 
 
-def paramGeom(paramInd, geometry):
+def paramGeom(paramSet, geometry):
+
+    '''Function which calculates the bond, valence angle or dihedral of the inputted parameters
+
+    Parameters:
+     paramSet: Nested list of Ints - the sets of parameters to calcualte the geometry for
+     geometry: Numpy array (dim: numAtoms, 3) (float) - Results array of x, y, z coordinates for each atom (might work as list)
+
+    Returns:
+     paramVal: List of floats - the calculated parameters for each one in the inputted paramSet
+    '''
 
     paramVal = []
-    for pI in paramInd:
-        if len(pI) == 2:
-            paramVal.append(atomDist(geometry[pI[0]], geometry[pI[1]]))
-        elif len(pI) == 3:
-            paramVal.append(atomAngle(geometry[pI[0]], geometry[pI[1]], geometry[pI[2]]))
+    # Check number of indexes specifying each parameter and calcualte corresponding value (bond, angle or dihedral)
+    for param in paramSet:
+        if len(param) == 2:
+            paramVal.append(atomDist(geometry[param[0]], geometry[param[1]]))
+        elif len(param) == 3:
+            paramVal.append(atomAngle(geometry[param[0]], geometry[param[1]], geometry[param[2]]))
         else:
-            paramVal.append(atomDihedral(geometry[pI[0]], geometry[pI[1]], geometry[pI[2]], geometry[pI[3]]))
+            paramVal.append(atomDihedral(geometry[param[0]], geometry[param[1]], geometry[param[2]], geometry[param[3]]))
     return(paramVal)
 
 
